@@ -1,0 +1,72 @@
+.DS_Store
+.terraform
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.tfstate.lock.info
+backend.
+!terraform/apps/backend.tf
+insecure_key
+insecure_key.pub
+.vagrant
+ansible/roles/qvc-vault-provision-onprem/files/*
+ansible/roles/qvc-consul-provision-onprem/files/*
+ansible/vault-agent/roles/vault/templates/roleID
+ansible/vault-agent/roles/vault/templates/secretID
+config.json
+sans.json
+ansible/playbooks/roles/python-cert-generation/files/certs/**/*
+certs/**/*
+terraform/vault-consul/backup.txt
+terraform/vault-consul/token.txt
+
+vagrant/certs/*
+ansible/playbooks/certs/*
+*.crt
+*.key
+*.pem
+*.csr
+*.srl
+
+# The name of our subca
+bundle-ca.pem
+
+_data
+
+
+
+#TERRAFORM
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+
+# Ignore any .tfvars files that are generated automatically for each Terraform run. Most
+# .tfvars files are managed as part of configuration and so should be included in
+# version control.
+#
+# example.tfvars
+*.tfvars
+*.tfvars.json
+
+# Ignore override files as they are usually used to override resources locally and so
+# are not checked in
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Include override files you do wish to add to version control using negated pattern
+#
+# !example_override.tf
+
+# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
+# example: *tfplan*
+
+#ANSIBLE
+settings.json
+lintenv

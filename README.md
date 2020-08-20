@@ -1,0 +1,78 @@
+### LOCAL DEVELOPMENT OF VAULT POLICIES, TOKEN, BACKENDS and AUTH METHODS. - You can just use docker-compose for this.
+
+1. First you will need to generate the certs.   Run `bash create_local_certs.sh <name>`
+2. Now you will need to add the `localhost.crt` to you keychain on your machine
+set it to `trust always`
+3. Now copy `localhost.key` and `localhost.crt` to ./config - this will allow
+vault to stand up with TLS.
+
+Now you will need to run `docker-compose up`.  This should give you vault backed by
+consul plus, consul as a backend for your terraform code.
+
+From here you will need to unseal vault. Run `bash unseal.sh`.  This will unseal vault and produce a file at
+`local-vault-dev/_data/keys.txt` that will container the unseal keys and the root token.
+
+## Configure Terraform to run plans and apply.
+First you will need to set the $VAULT_ADDR to the vault address you want to run your terraform against.  
+>export VAULT_ADDR=https://localhost:8200
+> https://localhost:8200 for local testing
+
+You will need to initialize Terraform using the config file backend per environment (LOCAL, artifactory)
+Navigate to terraform/ and run the `set_backend.sh true` for local testing or just `set_backend.sh` for artifactory.
+
+## BootStrap
+You should see a bash script that will handle bootstrap in local-vault-dev/. You will need to supply this script with a token and ip or DNS address of the MSSQL server.  For local you will need to use your own IP.
+For this you need your root token and local IP address, the root token is inside `_data/keys.txt_` and you can get your local IP address with `ifconfig | grep inet` then run:
+`bash bootstrap_vault.sh <root token> <local IP address>`
+> bash bootstrap_vault.sh <root-token> <ip>
+
+##Policy and role setup
+Now you need to set up applications `app.sh <root token>` if successful this will show you the app-roles tokens.
+> bash app.sh <root-token>
+
+#Orchestrator - for trusted introduction
+You will need to navigate to terraform/orchestrator.  Here you will have a script that is used to generate client TLS certifactes for authentication. `python parse_certs.py -T <root token> -U <Vault URL> -C <URL common name>` if successful you should get a response with GPG keys and OK 200.
+Now you can navigate to `orchestrator/provisioner` and run `terraform init` `terraform apply`.  This will produce a token that will allow you to create a
+backend auth role for vault and map the new cert to it.  navigate back to `orchestrator/tls`, set your VAULT_TOKEN=<new token you just go> then then `terraform init` `terraform apply`.  Neither of these will be stored in the state file for terraform for security reasons.
+Now you should have completed:
+  - Creates a certificate.
+  - Puts the certificate in Vault.
+  - Maps the certificate to the PKI role (that role is mapped to a policy) and gives the cert to an application so when the application authenticates it gets a token which is mapped to that policy.
+
+#Confirming
+`cd` to the `terraform/orchestrator`, make sure all the certificates we've just generated are there and create a token, run `vault login -method=cert -client-cert=cert.crt -client-key=private.crt name=ilc` this will be mapped to the `ilc-policy`.
+
+To generate your new set of credentials use
+    Ex:
+    ```
+    $ vault read mssql/creds/ilc-role
+    Key                Value
+    ---                -----
+    lease_id           mssql/creds/readonly/IQKUMCTg3M5QTRZ0abmLKjTX
+    lease_duration     1h
+    lease_renewable    true
+    password           A1a-T7Ezuy261IBew8H9
+    username           v-token-readonly-47vOtpF7pZq79Xajx7yq-1556567237
+    ```
+To generate a token use
+    Ex:
+    ```
+    $ vault token create -policy="ilc-policy"
+    Key                  Value
+    ---                  -----
+    token                s.bdC5uj32O2qiBvEesBjtw7CW
+    token_accessor       Yvbe7cAAjuG1ve0LAiawJJlS
+    token_duration       768h
+    token_renewable      true
+    token_policies       ["default" "ilc-policy"]
+    identity_policies    []
+    policies             ["default" "ilc-policy"]
+    ```
+
+---
+
+Note: If you're using a Linux machine the first step is to give `rwxrwxrwx` permissions recursively to the `data` and `config` folders as Docker is unable to access them on a Linux machine without those permissions. The problem is not present on MacOS. Run `chmod -R 777 _data config`.
+
+Note: On MacOS you need to install `gnu-sed` to be able to run the `token_replacer` script, this is required because the version of `sed` bundbled with MacOS is different to the one that comes with Linux systems, this is documented [here](https://unix.stackexchange.com/questions/13711/differences-between-sed-on-mac-osx-and-other-standard-sed).
+
+Install GNU sed on MacOS: `$ brew install gnu-sed`
