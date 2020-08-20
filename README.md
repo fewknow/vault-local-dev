@@ -17,6 +17,9 @@ First you will need to set the $VAULT_ADDR to the vault address you want to run 
 >export VAULT_ADDR=https://localhost:8200
 > https://localhost:8200 for local testing
 
+Then add the root token for terraform to default to when running bootstrap.
+> export VAULT_TOKEN=<root token from `_data`>
+
 You will need to initialize Terraform using the config file backend per environment (LOCAL, artifactory)
 Navigate to terraform/ and run the `set_backend.sh true` for local testing or just `set_backend.sh` for artifactory.
 

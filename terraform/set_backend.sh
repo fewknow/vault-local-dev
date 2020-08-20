@@ -16,21 +16,21 @@ function reset()
        else
          echo "Remove backend.tf first"
          rm -rf backend.tf
-         folder=$(echo ${directory} | awk -F "/" '{print $NF}')
+         folder=$(echo "${directory}" | awk -F "/" '{print $NF}')
          echo "FOLDER SHOULD BE : ${folder}"
-         echo "setting ${directory}/backend.tf"
+         echo "setting "${directory}"/backend.tf"
          if [ "${LOCAL}" == "true" ]; then
            echo "Setiting Consul Backend local"
            echo "terraform {
                   backend \"consul\" {
-                    path = \"vault/tfvars\"
+                    path = \"vault/${folder}\"
                   }
                 }" > ${directory}/backend.tf
          elif [ "$LOCAL" != "true" ]; then
            echo "Setiting Consul Backend artifactory"
            echo "terraform {
                   backend \"artifactory\" {
-                    subpath = \"vault/tfvars\"
+                    subpath = \"vault/${folder}\"
                   }
                 }" > ${directory}/backend.tf
          fi

@@ -1,5 +1,5 @@
 #!/bin/bash
-rm -rf ./_data
+#rm -rf ./_data
 rm -rf ../vault/vault
 cd ..
 ROOT=`pwd`
@@ -31,4 +31,4 @@ function reset()
   done
 }
 
-reset $ROOT/terraform 
+reset $ROOT/terraform
