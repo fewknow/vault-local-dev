@@ -5,8 +5,9 @@ ROOT=`pwd`
 
 function reset()
 {
+  PATH=$1
   echo "Setting up terraform backend"
-  for directory in $1/*; do
+  for directory in $PATH/*; do
     echo "PATH : $directory"
     if [[ -d "${directory}" ]]; then
        if [[ ${directory} == *tls* ]] || [[ ${directory} == *provisioner* ]] || [[ ${directory} == *orchestrator* ]] || [[ ${directory} == *bootstrap_config* ]]; then
