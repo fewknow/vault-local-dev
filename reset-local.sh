@@ -1,7 +1,7 @@
 #!/bin/bash
 rm -rf ./_data
 rm -rf ../vault/vault
-cd ..
+
 ROOT=`pwd`
 
 

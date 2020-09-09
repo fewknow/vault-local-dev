@@ -1,6 +1,6 @@
 ### LOCAL DEVELOPMENT OF VAULT POLICIES, TOKEN, BACKENDS and AUTH METHODS. - You can just use docker-compose for this.
 
-1. First you will need to generate the certs.   Run `bash create_local_certs.sh <name>`
+1. First you will need to generate the certs.   Run `bash create_local_certs.sh <name>` from the project root. 
 2. Now you will need to add the `localhost.crt` to you keychain on your machine
 set it to `trust always`
 3. Now copy `localhost.key` and `localhost.crt` to ./config - this will allow
@@ -22,7 +22,7 @@ Navigate to terraform/ and run the `set_backend.sh true` for local testing or ju
 
 ## BootStrap
 You should see a bash script that will handle bootstrap in local-vault-dev/. You will need to supply this script with a token and ip or DNS address of the MSSQL server.  For local you will need to use your own IP.
-For this you need your root token and local IP address, the root token is inside `_data/keys.txt_` and you can get your local IP address with `ifconfig | grep inet` then run:
+For this you need your root token and local IP address, the root token is inside `_data/keys.txt_` and you can get your local IP address with `ifconfig | awk '/broadcast/{print $2}'` then run:
 `bash bootstrap_vault.sh <root token> <local IP address>`
 > bash bootstrap_vault.sh <root-token> <ip>
 

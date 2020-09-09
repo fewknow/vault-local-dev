@@ -1,5 +1,5 @@
 terraform {
                   backend "consul" {
-                    path = "vault/vault"
+                    path = "vault/terraform"
                   }
                 }

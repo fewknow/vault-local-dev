@@ -29,7 +29,7 @@ resource "vault_pki_secret_backend_crl_config" "crl_config" {
 resource "vault_pki_secret_backend_config_ca" "ca_configuration" {
   depends_on = [vault_pki_secret_backend_crl_config.crl_config]
   backend    = vault_pki_secret_backend_crl_config.crl_config.backend
-  pem_bundle = file("./bundle-ca.pem")
+  pem_bundle = file("../../../../config/${var.env}.pem")
 }
 
 # config_urls sets up the endpoints for the configuration URLs.

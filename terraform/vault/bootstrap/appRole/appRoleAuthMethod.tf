@@ -5,33 +5,30 @@ resource "vault_approle_auth_backend_role" "jenkins" {
   backend               = "approle"
   role_name             = "jenkins-role"
   token_policies        = ["default", "vault-agent-policy"]
-  secret_id_bound_cidrs = ["10.103.7.212/32"]
+  # secret_id_bound_cidrs = []
 }
 
 data "vault_approle_auth_backend_role_id" "jenkins" {
   backend               = "approle"
   role_name             = vault_approle_auth_backend_role.jenkins.role_name
-  secret_id_bound_cidrs = ["10.103.7.212/32"]
+  # secret_id_bound_cidrs = []
 }
 
 resource "vault_approle_auth_backend_role_secret_id" "jenkins" {
   backend               = "approle"
   role_name             = vault_approle_auth_backend_role.jenkins.role_name
-  secret_id_bound_cidrs = ["10.103.7.212/32"]
+  # secret_id_bound_cidrs = []
 }
 
-resource "null_resource" "role-id" {
-  depends_on = [vault_approle_auth_backend_role_secret_id.jenkins]
-  provisioner "local-exec" {
-    command     = "vault read -format=json auth/approle/role/jenkins-role/role-id | jq  -r '.data.role_id' > roleID"
-    interpreter = ["/bin/bash", "-c"]
-  }
+# Create files containing Jenkins AppRoleID and SecretID
+resource "local_file" "role_id" {
+    content           = data.vault_approle_auth_backend_role_id.jenkins.role_id
+    filename          = "./roleID"
+    file_permission   = "0600"
 }
 
-resource "null_resource" "secret-id" {
-  depends_on = [vault_approle_auth_backend_role_secret_id.jenkins]
-  provisioner "local-exec" {
-    command     = "vault write -f -format=json auth/approle/role/jenkins-role/secret-id | jq -r '.data.secret_id' > secretID"
-    interpreter = ["/bin/bash", "-c"]
-  }
+resource "local_file" "secret_id" {
+    content           = vault_approle_auth_backend_role_secret_id.jenkins.secret_id
+    filename          = "./secretID"
+    file_permission   = "0600"
 }

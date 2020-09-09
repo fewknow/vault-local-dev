@@ -29,6 +29,7 @@ variable "venafi_policy_zone_tls_auth" {
 
 variable "venafi_certificate_path" {
   description = "Venafi PEM bundle certificate path"
+  default     = "./"
 }
 
 variable "env" {

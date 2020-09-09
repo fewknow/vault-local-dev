@@ -1,4 +1,5 @@
 terraform {
-  backend "consul" {}
-}
- 
+                  backend "consul" {
+                    path = "vault/venafi"
+                  }
+                }

@@ -6,7 +6,7 @@ variable "datacenter_environment" {
   description = "Typically lower/prod/sandbox. Indicates which environment we're targeting"
 }
 
-variable "vault_token" {
+variable "token" {
   description = "Token required for authenticating with Vault"
 }
 
