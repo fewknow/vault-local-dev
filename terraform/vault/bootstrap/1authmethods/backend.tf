@@ -1,5 +1,5 @@
 terraform {
                   backend "consul" {
-                    path = "vault/config"
+                    path = "vault/1authmethods"
                   }
                 }

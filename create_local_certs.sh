@@ -4,7 +4,7 @@ echo "Generate CA"
 echo "*************************"
 echo "*************************"
 echo "*************************"
-openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:2048 -keyout $name.key -out $name.pem -subj "/C=US/CN=Example-Fewknow-CA"
+openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:2048 -keyout $name.key -out $name.pem -subj "/C=US/ST=YourState/L=YourCity/O=Example-Certificates/CN=localhost.local"
 openssl x509 -outform pem -in $name.pem -out $name.crt
 
 echo "*************************"

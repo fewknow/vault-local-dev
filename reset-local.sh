@@ -9,7 +9,7 @@ function reset()
 {
   echo "Clearing apps, consul, orchestrator"
   for directory in $1/*; do
-    echo "PATH : $directory"
+    #echo "PATH : $directory"
     if [[ -d "${directory}" ]]; then
        echo "deleting ${directory}/.terraform"
        rm -rf ${directory}/.terraform
@@ -24,8 +24,8 @@ function reset()
        reset $directory
 
 
-    elif [[ -f "${directory}" ]]; then
-      echo "Nothing to do for ${directory}"
+    # elif [[ -f "${directory}" ]]; then
+    #   echo "Nothing to do for ${directory}"
     fi
 
   done

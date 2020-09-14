@@ -7,7 +7,7 @@ function reset()
 {
   echo "Setting up terraform backend"
   for directory in $1/*; do
-    echo "PATH : $directory"
+    #echo "PATH : $directory"
     if [[ -d "${directory}" ]]; then
        if [[ ${directory} == *tls* ]] || [[ ${directory} == *provisioner* ]] || [[ ${directory} == *orchestrator* ]] || [[ ${directory} == *bootstrap_config* ]]; then
         #  echo "Skipping directoy : $directory becuase it doesn't need state"
@@ -38,8 +38,8 @@ function reset()
        reset $directory
 
 
-    elif [[ -f "${directory}" ]]; then
-      echo "Nothing to do for ${directory}"
+    # elif [[ -f "${directory}" ]]; then
+    #   echo "Nothing to do for ${directory}"
     fi
 
   done

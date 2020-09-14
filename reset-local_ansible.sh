@@ -26,6 +26,7 @@ function reset()
 
     elif [[ -f "${directory}" ]]; then
       echo "Nothing to do for ${directory}"
+      continue
     fi
 
   done

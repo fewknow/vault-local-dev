@@ -66,7 +66,7 @@ function clean_local(){
         rm -f $pwd/config/*.crt $pwd/config/*.key 
         build_certs
     ;;
-    n|N|No)
+    n|N|no)
     ;;
     *)
         printf "\n Invalid section, please use the format 'Y|N'\n\n"
@@ -87,7 +87,7 @@ clean_local
 
 # Certiicate check
 if [ -z ${PROJECT_NAME} ];then
-    printf '\e[1;34m%-6s\e[m' "Name your project env: " 
+    printf "\e[1;34m\nName your project env: \e[0m" 
     read PROJECT_NAME
 
     if ls ./config | grep -q 'localhost.crt' && ls ./config | grep -q 'localhost.key' && ls ./config | grep -q ".pem";then
@@ -95,16 +95,16 @@ if [ -z ${PROJECT_NAME} ];then
         printf "\e[1;34m%-6s\nProject SSL Certs found, using the following files: \e[m\n\n"
         ls ./config | grep "localhost.crt\|localhost.key\|.pem"
 
-        printf "\e[1;34m%-6s\nIf you did not use this script to generate your certs, please open the localhost.crt certificate you created and verify it is set to 'Always Trust' in your keychain.\e[m"
-        printf "\e[1;34m%-6s\n\nOpen Keychain now? \e[0m"
+        printf "\e[1;34m%-6s\nIf you did not use this script to generate your certs, please open the localhost.crt certificate you created and verify it is set to 'Always Trust' in your keychain. \e[0m"
+        printf "\e[1;34m\nOpen Keychain now? \e[0m"
         read KEYCHAIN
 
         case $KEYCHAIN in
         y|Y|yes)
-            printf "\e[0;31m\nNote:\e[0m Opening keychain - if you generated a new cert, look for the cert that expires 3 years from the time you ran this script, double click, then hit the 'trust' drop-down and choose: 'Always Trust'"
+            printf "\e[0;31m\nNote:\e[0m Opening keychain - if you generated a new cert, look for the cert that expires 3 years from the time you ran this script, double click, then hit the 'trust' drop-down and choose: 'Always Trust'\e[0m"
             # Open KeyChain
             open /Library/Keychains/System.keychain
-            printf "\n\e[1;34m%-6s\nPress any key to continue...\e[m\n"
+            printf "\e[1;34m\nPress any key to continue...\e[m\n"
             read  -n 1 I
         ;;
         *)
@@ -120,51 +120,81 @@ if [ -z ${PROJECT_NAME} ];then
             build_certs
         ;;
         n|N|No)
-            printf "\n Exiting, please add certs to continue...\n\n"
+            printf "\n Exiting, please add certs and restart this script...\n\n"
             exit 0
         ;;
         esac 
     fi
 fi
 
+# If you did not clean all configs etc skip starting a new compose project, configure TF backend to consul and unseal vault
 case $CLEAN_BOOL in
 y|Y|yes|Yes)
-    # # Run Docker Comose to build our project
+    # Run Docker Comose to build our project
     rm -f screenlog.0
     screen -L -S local-vault -d -m docker-compose -f docker-compose.yml up
-    printf "\e[1;34m%-6s\nDetached screen started with docker-compse\nView the full log at anytime via the project_root/screenlog.0\nTo attach to this screen at any time run 'screen -r'\e[0m\n\n"
 
-    # # View running screen with or docker containers
-    screen -ls 
+    PID=`screen -ls | awk -F'.' "/local-vault/ {print \$1}"`
+    printf "\e[1;34m\nDetached screen started with docker-compse\n\nView the full log at anytime via the ${PWD}/screenlog.0\n\nTo attach to this screen at any time run 'screen -r ${PID}'\e[0m\n\n"
 
-    printf "\e[1;34m%-6s\nWaiting for containers to complete startup\e[0m\n\n"
+    # Advise we are waiting for the project to complete the startup process 
+    printf "\e[1;34m\nWaiting for containers to complete startup\e[0m\n"
     until cat screenlog.0 | grep -q "Vault server started!"
     do
-        sleep 5
+        sleep 1
+        printf "\e[1;34m.\e[0m" 
     done
 
-    # # Unsealing the vault 
-    # sh unseal.sh &2>/dev/null 
-    printf "\e[1;34m\nUnseal keys and token stored in '_data/keys.txt'\e[0m\n"
+    # Setup terraform backend
+    printf "\e[1;34m\n\nSetting TF backend to our consul cluster\e[0m\n\n"
+    sleep 3
+    sh ./terraform/set_backend.sh true
+
+    KEYS_FILE='_data/keys.txt'
+    export VAULT_SKIP_VERIFY=true
     export VAULT_ADDR=https://localhost:8200
+
+    # init Vault
+    vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
+    export VAULT_TOKEN=$(cat ${KEYS_FILE} | awk '/Root Token:/{print substr($4, 1, length($4)-1)}')
+
+    printf "\e[1;34m\nUnseal keys and token stored in ${KEYS_FILE}\e[0m\n"
     sleep 3
 
-    # # Setup terraform backend
-    printf "\e[1;34m\nSetting TF backend to our consul cluster\e[0m\n\n"
-    sh ./terraform/set_backend.sh true
+    # Unseal Vault
+    printf "\e[1;34m\nAttempting unseal process now...\n\n\e[0m"
+    for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
+        UNSEAL_KEY=${i}
+        vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
+    done
+
 ;;
 n|N|No|no)
+    if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
+        printf "\e[1;34m\nUnsealing Vault...\e[0m\n"
+        for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
+        UNSEAL_KEY=${i}
+        vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
+        done
+    fi
 ;;
 esac
 
-# Unseal vault 
-sh unseal.sh
-
-# # Get the vault root token and your local ip
+# Get the vault root token and your local ip
 VR_TOKEN=`cat ./_data/keys.txt | grep Initial | cut -d':' -f2`
 
 # Bootstrap the vault configuration
-sh bootstrap_vault.sh ${VR_TOKEN} ${PROJECT_NAME}
+printf "\e[1;34m\nShould we bootstap Vault? \e[0m"
+read BOOTSTRAP
+
+case $BOOTSTRAP in
+    y|Y|yes)
+        sh bootstrap_vault.sh ${VR_TOKEN} ${PROJECT_NAME}
+    ;;
+    *)
+        printf "\e[1;34m\nSkipping Bootstrap\n\e[0m"
+    ;;
+esac
 
 # Setup AppRoles and Associated tokens
 sh apps.sh ${VR_TOKEN}
