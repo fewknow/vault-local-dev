@@ -33,7 +33,7 @@ function reset()
                   }
                 }" > ${directory}/backend.tf
          fi
-      fi
+       fi
 
        reset $directory
 

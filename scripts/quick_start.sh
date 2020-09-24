@@ -10,6 +10,33 @@
 # end=$'\e[0m'
 
 ## Script designed to automate the setup of this entire project. 
+function bootstrap_vault(){
+    for path in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d | sed s@//@/@); do
+        printf "\e[1;34m\nPATH : $path\e[0m"
+
+        PROJECT="${my_array[$len-1]}"
+        printf "\nPROJECT : $PROJECT"
+        printf "\e[1;34m\nShould TF bootstrap this module? \e[0m"
+        read TO_BOOTSTRAP   
+        case $TO_BOOTSTRAP in
+        y|Y|yes)
+         echo "terraform init for ${path}"
+         echo "cd into ${path}"
+         cd ${path} 
+         echo "attempting: terraform init -backend-config=${terraform_path}/local-backend.config"
+         terraform init -backend-config="${terraform_path}/local-backend.config"    
+         echo "attempting terraform apply -var=vault_token=${VR_TOKEN} -var=vault_addr=${VAULT_ADDR}"
+         terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
+        ;;
+        n|N|no)
+        ;;      
+        *)
+          printf "\e[1;34m\nIncorrect selection, skipping... \e[0m\n\n"
+        ;;
+        esac
+    done
+    cd ${PROJECT_ROOT}
+}
 
 function build_certs(){
     # Get local ip address and add it to our certificate request 
@@ -30,19 +57,19 @@ function build_certs(){
     # Add new localhost.crt to your keychain as 'Always Trusted'
     printf "\e[0;34m\nAdding new cert to keychain and setting as 'Always Trust - If prompted, please enter your 'sudo' password below.\e[0m\n\n'"
     sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
-    cd ${PROJECT_ROOT}
+    cd - >/dev/null 2>&1
 }
 
 function cert_check() {
     # Certiicate check
     if ls ${PROJECT_ROOT}/config/ | grep -q 'localhost.crt' && ls ${PROJECT_ROOT}/config | grep -q 'localhost.key';then
 
-        printf "\e[0;34m\nCluster Certs found, using the following files: \e[m\n\n"
-        ls ${PROJECT_ROOT}/config | grep "localhost.crt\|localhost.key\|.pem"
+        printf "\e[0;34m\nCluster Certs found, using the following files: \e[0m\n\n"
+        ls ${PROJECT_ROOT}/config | grep "localhost.crt\|localhost.key"
 
         # Verify localhost.crt is added to our keychain
         if security export -k /Library/Keychains/System.keychain -t certs | grep -q `cat ${PROJECT_ROOT}/config/localhost.crt | sed '/^-.*-$/d' | head -n 1`; then
-            printf "\e[0;34m\nCert found in keychain\e[0m\n"
+            printf "\e[0;34m\nCert found in your local Keychain\e[0m\n\n"
         else
             printf "\e[0;34m\nCert not found in keychain, adding now as 'Always Trusted'\e[0m"
             sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
@@ -56,7 +83,7 @@ function cert_check() {
             build_certs
         ;;
         n|N|No)
-            printf "\n Exiting, please add certs and restart this script or use the gernate certs option...\n\n"
+            printf "\n Exiting, please add certs and restart this script or use the generate certs option...\n\n"
             exit 0
         ;;
         esac 
@@ -71,7 +98,9 @@ function reset_local(){
     # If true, stop any docker-compose projects built with this project.
     case $STOP_COMPOSE in
     y|Y|yes)
+        cd ${PROJECT_ROOT}
         docker-compose down
+        cd - >/dev/null 2>&1
     ;;
     n|N|no)
     ;;
@@ -86,22 +115,16 @@ function reset_local(){
     # If true, delete all previous terraform configs, states etc.
     case $RESET_BOOL in 
     y|Y|yes)
+        printf "\e[0;34m\nClearing apps, Consul, Orchestrator, Vault and Consul data\e[0m\n"
         rm -rf ${PROJECT_ROOT}/_data
         rm -rf ${PROJECT_ROOT}/localhost.crt ${PROJECT_ROOT}/localhost.key
-        echo "Clearing apps, consul, orchestrator"
-        for directory in ${PROJECT_ROOT}/terraform/*; do
-          if [[ -d "${directory}" ]]; then
-             echo "deleting ${directory}/.terraform"
-             rm -rf ${directory}/.terraform
-             echo "deleting terraform.tfstate.d"
-             rm -rf ${directory}/terraform.tfstate.d
-             echo "deleting terraform.tfstate"
-             rm -rf ${directory}/terraform.tfstate
-             echo "deleting terraform.tfstate.backup"
-             rm -rf ${directory}/terraform.tfstate.backup
-             echo "delete backends"
-             rm -rf ${directory}/backend.tf
-          fi
+        printf "\e[0;34m\nRecursively deleted:\n\n\e[0m.terraform | terraform.tfstate.d | terraform.tfstate | terraform.tfstate.backup | backend.tf\e[0;34m\n\nfrom\n\n\e[0m ${PROJECT_ROOT}/terraform/\n"
+        for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
+            find . -type f -name ".terraform" -delete
+            find . -type f -name "terraform.tfstate.d" -delete
+            find . -type f -name "terraform.tfstate" -delete
+            find . -type f -name "terraform.tfstate.backup" -delete
+            find . -type f -name "backend.tf" -delete 
         done
     ;;
     n|N|No)
@@ -125,40 +148,38 @@ function reset_local(){
 }
 
 function set_backend(){
-    for directory in ${PROJECT_ROOT}/terreaform/*; do
-      if [[ -d "${directory}" ]]; then
-         if [[ ${directory} == *tls* ]] || [[ ${directory} == *provisioner* ]] || [[ ${directory} == *orchestrator* ]] || [[ ${directory} == *bootstrap* ]]; then
-           continue
-         else
-           rm -rf backend.tf
-           folder=$(echo ${directory} | awk -F "/" '{print $NF}')
-           echo "FOLDER SHOULD BE : ${folder}"
-           echo "setting ${directory}/backend.tf"
-           if [ "${LOCAL}" == "true" ]; then
-             echo "Setting Consul Backend local"
-             echo "terraform {
-                    backend \"consul\" {
-                      path = \"vault/${folder}\"
-                    }
-                  }" > ${directory}/backend.tf
-           elif [ "$LOCAL" != "true" ]; then
-             echo "Setting Consul Backend artifactory"
-             echo "terraform {
-                    backend \"artifactory\" {
-                      subpath = \"vault/tfvars\"
-                    }
-                  }" > ${directory}/backend.tf
-           fi
+    # BACKEND_PATHS=`find ${PROJECT_ROOT}/terraform/* -type d | sed s@//@/@`
+    # echo ${BACKEND_PATHS}
+    for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
+        if [[ ${directory} == *tls* ]] | [[ ${directory} == *provisioner* ]] | [[ ${directory} == *orchestrator* ]]; then
+          continue
+        else
+          rm -f ${directory}/backend.tf
+          folder=$(echo ${directory} | awk -F "/" '{print $NF}')
+          printf "\e[0;34mEntity:\e[0m ${folder}\n"
+          printf "\e[0;34mCreating\e[0m ${directory}/backend.tf\n\n"
+          echo "terraform {
+                 backend \"consul\" {
+                   path = \"vault/${folder}\"
+                 }
+               }" > ${directory}/backend.tf
         fi
-      fi
-    
     done
 }
+
+function unseal_vault(){
+    printf "\e[0;34m\nAttempting unseal process now...\n\n\e[0m"
+        for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
+            UNSEAL_KEY=${i}
+            vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
+            echo ""
+        done
+}
+
 #### Script Starts Here ####
 
-# change to project root and set basic vars
-cd ../
-PROJECT_ROOT="${PWD}"
+# Set project root directory
+PROJECT_ROOT=$(dirname $(cd `dirname $0` && pwd))
 KEYS_FILE="${PROJECT_ROOT}/_data/keys.txt"
 
 printf "\e[0;32m\n## Vault/Consul ##\e[0m\n\n"
@@ -174,25 +195,20 @@ reset_local
 # If you did not clean all configs etc skip starting a new compose project, configure TF backend to consul and unseal vault
 case $RESET_BOOL in
   y|Y|yes|Yes) 
-      # Remove previous screen logs 
-      rm -f screenlog.* >/dev/null 2>&1
-      screen -L -S local-vault -d -m docker-compose -f docker-compose.yml up
-      PID=`screen -ls | awk -F'.' "/local-vault/ {print \$1}"`
-      printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compse project in a detached screen\n\nView the full log at anytime via\e[0m ${PWD}/screenlog.0\e[0m\n"
-      printf "\e[0;34m\nTo attach to this screen at any time run\e[0m `screen -r ${PID}`\n\n"
-      
+      printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+      sleep 2
+      docker-compose -f docker-compose.yml up -d  
        
       # Advise we are waiting for the project to complete the startup process 
-      printf "\e[0;34m\nWaiting for containers to complete startup\e[0m\n"
-      until cat screenlog.0 | grep -q "Vault server started!"
+      printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+      until vault status >/dev/null 2>&1 | grep -q "Key"
       do
-          sleep 1
-          printf "\e[0;35m.\e[0m" 
+          printf "\e[0;35m.\e[0m"
+          sleep 2 
       done
   
       # Setup terraform backend
       printf "\e[0;34m\n\nSetting TF backend to our consul cluster\e[0m\n\n"
-      sleep 3
       set_backend
   
       export VAULT_SKIP_VERIFY=true
@@ -202,25 +218,18 @@ case $RESET_BOOL in
       vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
       export VAULT_TOKEN=$(cat ${KEYS_FILE} | awk '/Root Token:/{print substr($4, 1, length($4)-1)}')
   
-      printf "\e[0;34m\nUnseal keys and token stored in ${KEYS_FILE}\e[0m\n"
+      printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
       sleep 3
   
       # Unseal Vault
-      printf "\e[0;34m\nAttempting unseal process now...\n\n\e[0m"
-      for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
-          UNSEAL_KEY=${i}
-          vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
-      done
+      unseal_vault
   
   ;;
   n|N|No|no)
-      if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
-          printf "\e[0;34m\nUnsealing Vault...\e[0m\n"
-          for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
-          UNSEAL_KEY=${i}
-          vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
-          done
-      fi
+        if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
+            # Unseal Vault
+            unseal_vault
+        fi
   ;;
 esac
 
@@ -233,7 +242,7 @@ read BOOTSTRAP
 
 case $BOOTSTRAP in
 y|Y|yes)
-    sh bootstrap_vault.sh ${VR_TOKEN} ${PROJECT_NAME}
+    bootstrap_vault ${VR_TOKEN} ${PROJECT_NAME}
 ;;
 *)
     printf "\e[0;34m\nSkipping Bootstrap\n\e[0m"
