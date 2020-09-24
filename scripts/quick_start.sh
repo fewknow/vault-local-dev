@@ -11,31 +11,32 @@
 
 ## Script designed to automate the setup of this entire project. 
 function bootstrap_vault(){
-    for path in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d | sed s@//@/@); do
-        printf "\e[1;34m\nPATH : $path\e[0m"
+    for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@); do
+        printf "\e[0;34m\nPATH:\e[0m $DIR\n"
+        MODULE="$(basename $(dirname ${DIR}/backend.tf))"
 
-        PROJECT="${my_array[$len-1]}"
-        printf "\nPROJECT : $PROJECT"
-        printf "\e[1;34m\nShould TF bootstrap this module? \e[0m"
+        printf "\e[0;34mModule:\e[0m $MODULE\n"
+        printf "\e[0;34m\nShould TF bootstrap this module? \e[0m"
         read TO_BOOTSTRAP   
+
         case $TO_BOOTSTRAP in
         y|Y|yes)
-         echo "terraform init for ${path}"
-         echo "cd into ${path}"
-         cd ${path} 
-         echo "attempting: terraform init -backend-config=${terraform_path}/local-backend.config"
-         terraform init -backend-config="${terraform_path}/local-backend.config"    
+         echo "terraform init for ${DIR}"
+         echo "cd into ${DIR}"
+         cd ${DIR} 
+         echo "attempting: terraform init -backend-config=${PROJECT_ROOT}/terraform/local-backend.config"
+         terraform init -backend-config="${PROJECT_ROOT}/terraform/local-backend.config"    
          echo "attempting terraform apply -var=vault_token=${VR_TOKEN} -var=vault_addr=${VAULT_ADDR}"
          terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
+         cd -
         ;;
         n|N|no)
         ;;      
         *)
-          printf "\e[1;34m\nIncorrect selection, skipping... \e[0m\n\n"
+          printf "\e[0;34m\nIncorrect selection, skipping... \e[0m\n\n"
         ;;
         esac
     done
-    cd ${PROJECT_ROOT}
 }
 
 function build_certs(){
@@ -169,11 +170,11 @@ function set_backend(){
 
 function unseal_vault(){
     printf "\e[0;34m\nAttempting unseal process now...\n\n\e[0m"
-        for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
-            UNSEAL_KEY=${i}
-            vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
-            echo ""
-        done
+    for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
+        UNSEAL_KEY=${i}
+        vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
+        echo ""
+    done
 }
 
 #### Script Starts Here ####
