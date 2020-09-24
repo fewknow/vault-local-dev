@@ -29,7 +29,7 @@ resource "vault_pki_secret_backend_crl_config" "crl_config" {
 resource "vault_pki_secret_backend_config_ca" "ca_configuration" {
   depends_on = [vault_pki_secret_backend_crl_config.crl_config]
   backend    = vault_pki_secret_backend_crl_config.crl_config.backend
-  pem_bundle = file("../../../../config/${var.env}.pem")
+  pem_bundle = file("./bundle-ca.pem")
 }
 
 # config_urls sets up the endpoints for the configuration URLs.
@@ -58,32 +58,19 @@ resource "null_resource" "tls-issuer-role" {
 # enable_tls_engine enables the tls backend with the Venafi monitor plugin and
 # creates a venafi-policy that binds to a Vault policy to allow for Venafi policy
 # enforcement.
-# resource "null_resource" "enable_tls_engine" {
-#   provisioner "local-exec" {
-#     command = <<EOF
-#             export VAULT_ADDR=${var.vault_addr};
-#             export VAULT_TOKEN=${var.vault_token};
+resource "null_resource" "enable_tls_engine" {
+  provisioner "local-exec" {
+    command = <<EOF
+            export VAULT_ADDR=${var.vault_addr};
+            export VAULT_TOKEN=${var.vault_token};
 
-#             vault secrets enable -path=tls -plugin-name=vault-pki-backend plugin;
-#             vault write tls/venafi-policy/${var.venafi_policy_name} \
-#                 tpp_url="${var.venafi_address}" \
-#                 tpp_user="${var.venafi_user}" \
-#                 tpp_password="${var.venafi_password}" \
-#                 zone="${var.venafi_policy_zone_tls}" \
-#                 trust_bundle_file="${var.venafi_certificate_path}";
-#         EOF
-#   }
-# }
-
-# resource "vault_generic_endpoint" "venafi_plugin" {
-#   disable_read         = false
-#   disable_delete       = true
-#   path                 = "sys/plugins/catalog/secret/venafi-pki-backend"
-#   ignore_absent_fields = true
-
-#   data_json = jsonencode(
-#   {
-#     sha_256 = ""
-#     command = "venafi-pki-backend"
-#   }
-# }
+            vault secrets enable -path=tls -plugin-name=vault-pki-monitor-venafi_strict plugin;
+            vault write tls/venafi-policy/${var.venafi_policy_name} \
+                tpp_url="${var.venafi_address}" \
+                tpp_user="${var.venafi_user}" \
+                tpp_password="${var.venafi_password}" \
+                zone="${var.venafi_policy_zone_tls}" \
+                trust_bundle_file="${var.venafi_certificate_path}";
+        EOF
+  }
+}

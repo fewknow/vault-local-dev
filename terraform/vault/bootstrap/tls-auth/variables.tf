@@ -1,5 +1,5 @@
 variable "vault_token" {
-  description = "Default Vault Token."
+  description = "Default Vault Token"
 }
 
 variable "vault_addr" {
@@ -23,15 +23,14 @@ variable "venafi_address" {
   default     = "https://venafi.qvcdev.qvc.net:443/vedsdk"
 }
 
-variable "venafi_policy_zone_tls" {
+variable "venafi_policy_zone_tls_auth" {
   description = "Venafi platform policy name"
 }
 
-variable "env" {
-  description = "Terraform workspace env"
-}
-
-
 variable "venafi_certificate_path" {
   description = "Venafi PEM bundle certificate path"
+}
+
+variable "env" {
+  description = "Environment"
 }

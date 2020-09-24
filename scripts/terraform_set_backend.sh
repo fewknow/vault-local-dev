@@ -1,45 +1,46 @@
 #!/bin/bash
 
-LOCAL="$1"
+LOCAL=$1
 ROOT=`pwd`
 
 function reset()
 {
+  PATH=$1
   echo "Setting up terraform backend"
-  for directory in $1/*; do
-    #echo "PATH : $directory"
+  for directory in $PATH/*; do
+    echo "PATH : $directory"
     if [[ -d "${directory}" ]]; then
        if [[ ${directory} == *tls* ]] || [[ ${directory} == *provisioner* ]] || [[ ${directory} == *orchestrator* ]] || [[ ${directory} == *bootstrap_config* ]]; then
-        #  echo "Skipping directoy : $directory becuase it doesn't need state"
+         echo "Skipping directoy : $directory becuase it doesn't need state"
          continue
        else
-         echo "Removing backend.tf first"
+         echo "Remove backend.tf first"
          rm -rf backend.tf
-         folder=$(echo ${directory} | awk -F "/" '{print $NF}')
+         folder=$(echo "${directory}" | awk -F "/" '{print $NF}')
          echo "FOLDER SHOULD BE : ${folder}"
-         echo "setting ${directory}/backend.tf"
+         echo "setting "${directory}"/backend.tf"
          if [ "${LOCAL}" == "true" ]; then
-           echo "Setting Consul Backend local"
+           echo "Setiting Consul Backend local"
            echo "terraform {
                   backend \"consul\" {
                     path = \"vault/${folder}\"
                   }
                 }" > ${directory}/backend.tf
          elif [ "$LOCAL" != "true" ]; then
-           echo "Setting Consul Backend artifactory"
+           echo "Setiting Consul Backend artifactory"
            echo "terraform {
                   backend \"artifactory\" {
-                    subpath = \"vault/tfvars\"
+                    subpath = \"vault/${folder}\"
                   }
                 }" > ${directory}/backend.tf
          fi
-       fi
+      fi
 
        reset $directory
 
 
-    # elif [[ -f "${directory}" ]]; then
-    #   echo "Nothing to do for ${directory}"
+    elif [[ -f "${directory}" ]]; then
+      echo "Nothing to do for ${directory}"
     fi
 
   done
