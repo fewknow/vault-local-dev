@@ -151,7 +151,7 @@ function reset_local(){
 function set_backend(){
     # BACKEND_PATHS=`find ${PROJECT_ROOT}/terraform/* -type d | sed s@//@/@`
     # echo ${BACKEND_PATHS}
-    for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
+    for directory in $(find ${PROJECT_ROOT}/terraform -type d -mindepth 1 -maxdepth 3 | sed s@//@/@); do
         if [[ ${directory} == *tls* ]] | [[ ${directory} == *provisioner* ]] | [[ ${directory} == *orchestrator* ]]; then
           continue
         else
@@ -187,7 +187,9 @@ printf "\e[0;32m\n## Vault/Consul ##\e[0m\n\n"
 printf "\e[0;31m\nHint:\e[0m If you've already run this script and just need to start compose, run \e[0m\e[0;34m'docker-compose up'\e[0m from the project root. Your unseal keys and root token are stored in:\e[0m\e[0;34m ${KEYS_FILE}\e[0m\n\n"
 
 printf '\e[0;34m%-6s\e[m' "Name your project: " 
-read PROJECT_NAME 
+read PROJECT_NAME
+# Set environment so TF can pickup the var. 
+export TF_VAR_env=${PROJECT_NAME}
 
 # Clean old files and compose projects 
 printf "\e[0;31m\nPlease note: \e[0mYou should stop any running docker containers previously used with this project before attempting to clean old files\n\n"
@@ -235,7 +237,7 @@ case $RESET_BOOL in
 esac
 
 # Get the vault root token and your local ip
-VR_TOKEN=`cat ./_data/keys.txt | grep Initial | cut -d':' -f2`
+VR_TOKEN=`cat ./_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
 
 # Bootstrap the vault configuration
 printf "\e[0;34m\nDo you want to bootstap Vault? \e[0m"

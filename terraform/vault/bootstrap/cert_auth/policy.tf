@@ -35,3 +35,15 @@ resource "vault_policy" "tls-auth-issuer-role-policy" {
   }
   EOT
 }
+
+# Create Policy 
+resource "vault_policy" "admin-cert-policy" {
+  name = "admin_cert_auth_policy"
+  policy = <<EOT
+
+    #Allow all
+    path "*" {
+      capabilities = [ "read", "list", "create", "update", "delete" ]
+    }
+  EOT
+}
