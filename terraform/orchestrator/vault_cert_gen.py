@@ -2,6 +2,10 @@
 import json
 import argparse
 import requests
+import urllib3
+
+# Disable warnings to localhost vault calls
+urllib3.disable_warnings()
 
 # initiate the parser allowing you to pass in parameters to the script and
 # having -h to see the avaible parameters.

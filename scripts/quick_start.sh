@@ -10,6 +10,14 @@
 # end=$'\e[0m'
 
 ## Script designed to automate the setup of this entire project. 
+function app_roles(){
+
+    cd ${PROJECT_ROOT}/terraform/apps
+    terraform apply -var="token=${VR_TOKEN}"
+    cd - >/dev/null 2>&1
+
+}
+
 function bootstrap_vault(){
     for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@); do
         printf "\e[0;34m\nPATH:\e[0m $DIR\n"
@@ -28,7 +36,7 @@ function bootstrap_vault(){
          terraform init -backend-config="${PROJECT_ROOT}/terraform/local-backend.config"    
          echo "attempting terraform apply -var=vault_token=${VR_TOKEN} -var=vault_addr=${VAULT_ADDR}"
          terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
-         cd -
+         cd - >/dev/null 2>&1
         ;;
         n|N|no)
         ;;      
@@ -91,7 +99,26 @@ function cert_check() {
     fi
 }
 
-# Function to delete all local terraform/vault/consul configs used
+function orchestrator(){
+    if pip3 show requests >/dev/null 2>&1; then
+        continue
+    else
+        # Install Python module 'requests'
+        printf "\e[0;34m\nRequests module needed, please enter your sudo password below to complete the pip3 installation\n\e[0m"
+        sudo easy_install requests==2.22.0
+    fi
+
+    # Generate a cert for our app
+    printf "\e[0;34m\nStarting certificate genration - please enter the common name you wish to use: \e[0m"
+    read COMMON_NAME
+    python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${VR_TOKEN} -U "https://localhost:8200" -C ${COMMON_NAME}
+    #sh ${PROJECT_ROOT}/terraform/orchestrator/generate_certs.sh
+    cd ${PROJECT_ROOT}/terraform/orchestrator/provisioner
+    # terraform init
+    # terraform apply 
+    cd - >/dev/null 2>&1
+}
+
 function reset_local(){
     printf "\e[0;34m\nShould this script stop your previous Mimir docker-compose project? \e[0m"
     read STOP_COMPOSE
@@ -119,7 +146,7 @@ function reset_local(){
         printf "\e[0;34m\nClearing apps, Consul, Orchestrator, Vault and Consul data\e[0m\n"
         rm -rf ${PROJECT_ROOT}/_data
         rm -rf ${PROJECT_ROOT}/localhost.crt ${PROJECT_ROOT}/localhost.key
-        printf "\e[0;34m\nRecursively deleted:\n\n\e[0m.terraform | terraform.tfstate.d | terraform.tfstate | terraform.tfstate.backup | backend.tf\e[0;34m\n\nfrom\n\n\e[0m ${PROJECT_ROOT}/terraform/\n"
+        printf "\e[0;34m\nRecursively deleting:\n\n\e[0m.terraform | terraform.tfstate.d | terraform.tfstate | terraform.tfstate.backup | backend.tf\e[0;34m\n\nfrom\n\n\e[0m ${PROJECT_ROOT}/terraform/\n"
         for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
             find . -type f -name ".terraform" -delete
             find . -type f -name "terraform.tfstate.d" -delete
@@ -199,17 +226,17 @@ reset_local
 case $RESET_BOOL in
   y|Y|yes|Yes) 
       printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-      sleep 2
       docker-compose -f docker-compose.yml up -d  
        
       # Advise we are waiting for the project to complete the startup process 
       printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-      until vault status >/dev/null 2>&1 | grep -q "Key"
+      until vault status | grep -q "Key" 
       do
+          # >/dev/null 2>&1
           printf "\e[0;35m.\e[0m"
-          sleep 2 
+          sleep 3
       done
-  
+
       # Setup terraform backend
       printf "\e[0;34m\n\nSetting TF backend to our consul cluster\e[0m\n\n"
       set_backend
@@ -222,7 +249,7 @@ case $RESET_BOOL in
       export VAULT_TOKEN=$(cat ${KEYS_FILE} | awk '/Root Token:/{print substr($4, 1, length($4)-1)}')
   
       printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
-      sleep 3
+      sleep 2
   
       # Unseal Vault
       unseal_vault
@@ -230,6 +257,7 @@ case $RESET_BOOL in
   ;;
   n|N|No|no)
         if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
+            sleep 2
             # Unseal Vault
             unseal_vault
         fi
@@ -240,7 +268,7 @@ esac
 VR_TOKEN=`cat ./_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
 
 # Bootstrap the vault configuration
-printf "\e[0;34m\nDo you want to bootstap Vault? \e[0m"
+printf "\e[0;34mDo you want to bootstap Vault? \e[0m"
 read BOOTSTRAP
 
 case $BOOTSTRAP in
@@ -253,11 +281,10 @@ y|Y|yes)
 esac
 
 # Setup AppRoles and Associated tokens
-#sh apps.sh ${VR_TOKEN}
+#app_roles
 
 # # Setup tf orchestrator 
-# ## Check to make sure responce 200 fromt this command
-# python parse_certs.py -T ${VR_TOKEN} -U "https://localhost:8200" -C localhost
+orchestrator
 
 # #### Change dir from script starting location to terraform/orchestrator/provisioner 
 # terraform init 
