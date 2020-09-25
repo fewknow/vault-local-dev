@@ -204,6 +204,7 @@ function unseal_vault(){
     done
 }
 
+
 #### Script Starts Here ####
 
 # Set project root directory
