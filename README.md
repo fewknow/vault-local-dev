@@ -1,6 +1,17 @@
-### LOCAL DEVELOPMENT OF VAULT POLICIES, TOKEN, BACKENDS and AUTH METHODS. - You can just use docker-compose for this.
+# Vault Local Development
+A docker-compose drive project for local Vault development. This will run Vault backed by Consul, and Mssql in a docker-compose cluster behind TLS certs. Terraform is used to bootstrap the vault configuration. 
 
-1. First you will need to generate the certs.   Run `bash create_local_certs.sh <name>`
+There are 2 options to run this project, the Quick_start will prompt you for your project name and will configure everything for you behind the scenes; the manual option will allow you to walk through the process of the docker config then the TF project to configure it all. 
+
+***This project is a work in-progress, Sam Flint and Ian Copeland would love any suggestions you might have in the form of a PR.***
+
+---
+
+### Quick Start option:
+From the project root run the `quick_start.sh` script to build your cluster. You will be promepted to name your project unless certs are found in the config directory; in which case the script will use the name of your pem file. 
+
+### Manual Start:
+1. First you will need to generate the certs.   Run `bash create_local_certs.sh <name>` from the project root. 
 2. Now you will need to add the `localhost.crt` to you keychain on your machine
 set it to `trust always`
 3. Now copy `localhost.key` and `localhost.crt` to ./config - this will allow
@@ -25,7 +36,7 @@ Navigate to terraform/ and run the `set_backend.sh true` for local testing or ju
 
 ## BootStrap
 You should see a bash script that will handle bootstrap in local-vault-dev/. You will need to supply this script with a token and ip or DNS address of the MSSQL server.  For local you will need to use your own IP.
-For this you need your root token and local IP address, the root token is inside `_data/keys.txt_` and you can get your local IP address with `ifconfig | grep inet` then run:
+For this you need your root token and local IP address, the root token is inside `_data/keys.txt_` and you can get your local IP address with `ifconfig | awk '/broadcast/{print $2}'` then run:
 `bash bootstrap_vault.sh <root token> <local IP address>`
 > bash bootstrap_vault.sh <root-token> <ip>
 

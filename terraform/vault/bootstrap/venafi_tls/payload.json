@@ -1,0 +1,19 @@
+{
+  "organization": ["QRG, Inc."],
+  "venafi_check_policy": "Venafi-Certificate-Policy",
+  "country": "US",
+  "locality": "West Chester",
+  "province": "Pennsylvania",
+  "allow_any_name": true,
+  "venafi_import": true,
+  "generate_lease": true,
+  "tpp_password": "",
+  "tpp_url": "https://venafi.qvcdev.qvc.net:443/vedsdk",
+  "tpp_user": "",
+  "zone": "Vault\\Lower\\TLS",
+  "trust_bundle_file": "/vault/venafi/bundle.pem",
+  "ttl": "876h",
+  "max_ttl": "876h",
+  "allowed_domains": "*",
+  "allow_subdomains": true
+}
