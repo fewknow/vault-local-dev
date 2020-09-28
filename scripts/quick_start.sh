@@ -9,8 +9,15 @@
 # cyn=$'\e[1;36m'
 # end=$'\e[0m'
 
+
+## Add a check for vault and terraform installed locally
+## Add in Pauses requesting use to hit enter to continue in key areas 
+## Delete app folders from /config to ensure no previous certs exist as well as directories are deleted.
+## Cleanup pki function output from this script
+
+
 ## Script designed to automate the setup of this entire project. 
-function app_roles(){
+function app_policies(){
 
     cd ${PROJECT_ROOT}/terraform/apps
     terraform init
@@ -76,7 +83,7 @@ function build_local_certs(){
     cd - >/dev/null 2>&1
 }
 
-function cert_check() {
+function local_cert_check() {
     # Certiicate check
     if ls ${PROJECT_ROOT}/config/ | grep -q 'localhost.crt' && ls ${PROJECT_ROOT}/config | grep -q 'localhost.key';then
 
@@ -107,9 +114,9 @@ function cert_check() {
 }
 
 function create_root_cert(){
-    printf "\e[0;34mConfiguring Root and Intermediate CA, please wait...\e[0m\n"
+    printf "\n\e[0;34mConfiguring Root and Intermediate CA, please wait...\e[0m\n"
     sleep 5
-    vault login ${VR_TOKEN} 2>/dev/null
+    vault login ${VR_TOKEN} >/dev/null
     vault write -field=certificate pki_engine/root/generate/internal \
         common_name="${PROJECT_NAME}.com" \
         ttl=87600h > ${PROJECT_ROOT}/config/root_ca_cert.crt
@@ -131,6 +138,18 @@ function create_root_cert(){
     PKI_ENGINE=true
 }
 
+function dynamic_cert_login(){
+    printf "\e[0;34m\nTesting login with your new application cert and role\e[0m\n"
+    printf "\e[0;34m\nPlease enter the full path for the new ${APP_NAME} cert: \e[0m"
+    read APP_CERT_PATH
+
+    printf "\e[0;34m\nPlease enter the full path for the new ${APP_NAME} private key: \e[0m"
+    read APP_KEY_PATH
+    vault login -method=cert -client-cert=${APP_CERT_PATH} -client-key=${APP_KEY_PATH} name=${APP_NAME} | tee ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
+    
+    CERT_TOKEN=`cat ${PROJECT_ROOT}/config/mimir/token.txt | awk '/-----/{getline; print $2}'`
+}
+
 function orchestrator(){
     if ls /Library/Python/2.7/site-packages/ | grep -q "requests"
     then
@@ -141,25 +160,44 @@ function orchestrator(){
         sudo easy_install requests==2.22.0
     fi
 
-    # Make App dir and generate a cert for our app
-    mkdir ${PROJECT_ROOT}/config/${APP_NAME} && cd $_
+    # Make the application config directory
+    if ! ls ${PROJECT_ROOT}/config/${APP_NAME};
+    then
+        mkdir ${PROJECT_ROOT}/config/${APP_NAME}
+    else
+        rm -f ${PROJECT_ROOT}/config/${APP_NAME}
+        mkdir ${PROJECT_ROOT}/config/${APP_NAME}
+    fi
+
+    cd ${PROJECT_ROOT}/config/${APP_NAME}
+    APP_DIR=`pwd`
+
+    # Generate new certs for the app cert authentication
     printf "\e[0;34m\nCreating Application Certificats in:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n\n"
     python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${VR_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
+    ls -lah ${PROJECT_ROOT}/config/${APP_NAME}
     cd - >/dev/null 2>&1
 
+    # Generate a new token to use for provisioning our application 
+    cd ${PROJECT_ROOT}/terraform/orchestrator/provisioner
+    printf "\e[0;34m\nCreating Provisioner Token to be used when deploying from CI/CD - Application:\e[0m ${APP_NAME}\n\n"
+    sleep 3
+    terraform init
+    terraform apply -var="vault_token=${VR_TOKEN}"
+    printf "\e[0;34m\nNote:\e[0m This token is created to ensure 'root' permissions are not given to the pipeline as well as for audit purposes\n\n"
+    
+    # Get the new token and set as the vault root token
+    VR_TOKEN=`terraform output -json master_provisioner_token | tr -d '"'`
+    export VAULT_TOKEN=${VR_TOKEN}
+    cd - >/dev/null 2>&1
+
+    # Create new role and tie it to our newly gerenated appliction certs 
     cd ${PROJECT_ROOT}/terraform/orchestrator/tls
-    printf "\e[0;34m\nCerts Created, Creating Cert Auth Role:\e[0m ${APP_NAME}\n\n"
-    sleep 2
+    printf "\e[0;34m\nCreating Cert Auth Role with the Master Provisioner Token created in the previous step.\n\n"
+    sleep 3
     terraform init
     terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}"
     cd - >/dev/null
-
-    cd ${PROJECT_ROOT}/terraform/orchestrator/provisioner
-    printf "\e[0;34m\nCreating Provisioner Token to be used when deplaying:\e[0m ${APP_NAME}\n\n"
-    sleep 2
-    terraform init
-    terraform apply -var="vault_token=${VR_TOKEN}"
-    cd - >/dev/null 2>&1
 }
 
 function reset_local(){
@@ -208,7 +246,7 @@ function reset_local(){
         build_local_certs
     ;;
     n|N|no)
-        cert_check
+        local_cert_check
     ;;
     esac
 }
@@ -241,7 +279,6 @@ function unseal_vault(){
     done
 }
 
-
 #### Script Starts Here ####
 
 # Set project config
@@ -264,46 +301,46 @@ reset_local
 
 # If you did not clean all configs etc skip starting a new compose project, configure TF backend to consul and unseal vault
 case $RESET_BOOL in
-    y|Y|yes|Yes) 
-        # Start the new project in dettached docker 
-        printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-        cd ${PROJECT_ROOT}
-        docker-compose -f docker-compose.yml up -d  
+y|Y|yes|Yes) 
+    # Start the new project in dettached docker 
+    printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+    cd ${PROJECT_ROOT}
+    docker-compose -f docker-compose.yml up -d  
 
-        # Advise we are waiting for the project to complete the startup process 
-        printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-        until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault" 
-        do
-            # >/dev/null 2>&1
-            printf "\e[0;35m.\e[0m"
-            sleep 3
-        done
+    # Advise we are waiting for the project to complete the startup process 
+    printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+    until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault" 
+    do
+        # >/dev/null 2>&1
+        printf "\e[0;35m.\e[0m"
+        sleep 3
+    done
 
-        # Setup terraform backend
-        printf "\e[0;34m\n\nSetting TF backend to our consul cluster\e[0m\n\n"
-        set_backend
+    # Setup terraform backend
+    printf "\e[0;34m\n\nSetting TF backend to our consul cluster\e[0m\n\n"
+    set_backend
 
-        # init Vault
-        vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
+    # init Vault
+    vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
 
-        # Unseal Vault
-        printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
+    # Unseal Vault
+    printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
+    sleep 2
+    unseal_vault
+;;
+n|N|No|no)
+    if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
         sleep 2
+        # Unseal Vault
         unseal_vault
-    ;;
-    n|N|No|no)
-          if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
-              sleep 2
-              # Unseal Vault
-              unseal_vault
-          fi
-    ;;
+    fi
+;;
 esac
 
 # Get the vault root token and your local ip
 VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
 export VAULT_TOKEN="${VR_TOKEN}"
-vault login ${VR_TOKEN} >/dev/null
+#vault login ${VR_TOKEN} >/dev/null
 
 # Bootstrap the vault configuration
 printf "\e[0;34mDo you want to bootstap Vault? \e[0m"
@@ -318,7 +355,7 @@ y|Y|yes)
 ;;
 esac
 
-if ${PKI_ENGINE};
+if ${PKI_ENGINE}
 then
     printf "\e[0;34mVault setup complete, would you like to test dynamic cert_auth then generating a dynamic database secret? \e[0m"
     read DYNAMIC_TEST
@@ -326,22 +363,18 @@ then
     case ${DYNAMIC_TEST} in
     y|Y|yes)
         # Get app name
-        printf "\e[0;34m\nStarting certificate genration - please enter the app name you wish to use: \e[0m"
+        printf "\nStarting certificate genration:\e[0;34m Please enter the app name you wish to use: \e[0m"
         read APP_NAME
 
         # Setup AppRoles and Associated tokens
-        #app_roles
+        #app_policies
 
         # # Setup tf orchestrator 
         orchestrator
 
-        # #### Change dir from script starting location to terraform/orchestrator/provisioner 
-        # terraform init 
-        # terraform apply ## Add auto apply flag 
-        # ## Take token from above command the set to var and export as VR_Token
-        # # Cd to terraform/orchestrator/tls 
-        # terraform init
-        # terraform apply ## Add auto apply flag 
+        # Ask if they would like to test cert auth
+        printf "\n\e[0;34mLogging in with the newly generated application certificate\n\n\e[0m"
+        dynamic_cert_login
     ;;
     esac
 
