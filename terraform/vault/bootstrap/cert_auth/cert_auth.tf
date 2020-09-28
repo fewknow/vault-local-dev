@@ -1,7 +1,7 @@
 # Enable the cert auth backend
 resource "vault_auth_backend" "cert" {
   type = "cert"
-  path = "certs"
+  path = "cert"
 }
 
 # Create a role for authentication

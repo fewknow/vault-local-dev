@@ -1,0 +1,12 @@
+{
+  "ttl": "876h",
+  "max_ttl": "876h",
+  "allowed_domains": "*",
+  "allow_subdomains": true,
+  "enforce_hostnames": false,
+  "generate_lease": true,
+  "require_cn": false,
+  "allowed_other_sans": "*",
+  "allow_any_name": true,
+  "use_csr_common_name": false
+}

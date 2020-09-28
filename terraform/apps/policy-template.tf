@@ -1,6 +1,6 @@
 locals {
   _schemaversion = "1.0"
-  json_data      = jsondecode(file(var.policy_location))
+  json_data      = jsondecode(file("${path.module}/policy.tpl"))
   # Primarily in charge of translating JSON into a Terraform-readable map. Filters by matching schema version,
   # datacenter and datacenter environment passed to the script.
   policies = flatten([
@@ -34,11 +34,6 @@ resource "vault_policy" "policy_repository" {
   count  = length(local.policies)
   name   = "${local.policies[count.index].name}-policy"
   policy = <<EOT
-%{for ad_role in local.policies[count.index].active_directory~}
-path "ad/creds/${ad_role}*" {
-    capabilities = ["read", "list"]
-}
-%{endfor~}
 %{for database_role in local.policies[count.index].database~}
 path "mssql/creds/${database_role}*" {
     capabilities = ["read", "list"]

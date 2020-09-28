@@ -37,7 +37,7 @@ HEADERS = {
     'Content-Type' : 'application/json',
     'X-Vault-Token' : ARGS.token
 }
-URL = "{u}/v1/tls-auth/issue/tls-auth-issuer-role".format(u=ARGS.url)
+URL = "{u}/v1/pki_int/issue/tls-auth-issuer-role".format(u=ARGS.url)
 DATA = {
     "common_name" : ARGS.commonname,
     "ttl" : ARGS.ttl

@@ -13,6 +13,7 @@
 function app_roles(){
 
     cd ${PROJECT_ROOT}/terraform/apps
+    terraform init
     terraform apply -var="token=${VR_TOKEN}"
     cd - >/dev/null 2>&1
 
@@ -36,6 +37,11 @@ function bootstrap_vault(){
          terraform init -backend-config="${PROJECT_ROOT}/terraform/local-backend.config"    
          echo "attempting terraform apply -var=vault_token=${VR_TOKEN} -var=vault_addr=${VAULT_ADDR}"
          terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
+         if [ ${MODULE} == "pki_secrets" ]
+         then
+            # Configuring Root and Intermediate CA
+            create_root_cert
+        fi
          cd - >/dev/null 2>&1
         ;;
         n|N|no)
@@ -47,21 +53,22 @@ function bootstrap_vault(){
     done
 }
 
-function build_certs(){
+function build_local_certs(){
     # Get local ip address and add it to our certificate request 
     IFIP=`ifconfig | awk '/broadcast/{print $2}'`
     printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > domains.ext
 
     # Generate the project certificates
     cd ${PROJECT_ROOT}/config
+    rm -f *.pem *.crt *.key *.csr *.srl
     # Genrating CA
     printf "\e[0;34m\nGenerating CA Certs\e[0m\n\n"
-    openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:2048 -keyout ${PROJECT_NAME}.key -out ${PROJECT_NAME}.pem -subj "/C=US/ST=YourState/L=YourCity/O=Example-Certificates/CN=localhost.local"
+    openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:4096 -keyout ${PROJECT_NAME}.key -out ${PROJECT_NAME}.pem -subj "/C=US/ST=YourState/L=YourCity/O=${PROJECT_NAME}/CN=localhost.local"
     openssl x509 -outform pem -in ${PROJECT_NAME}.pem -out ${PROJECT_NAME}.crt
     # Generating Vault/Consul certificates
     printf "\e[0;34mGenerating Vault/Consul Certs\e[0m\n\n"
-    openssl req -new -nodes -newkey rsa:2048 -keyout localhost.key -out localhost.csr -subj "/C=US/ST=YourState/L=YourCity/O=Example-Certificates/CN=localhost.local"
-    openssl x509 -req -sha256 -days 1024 -in localhost.csr -CA ${PROJECT_NAME}.pem -CAkey ${PROJECT_NAME}.key -CAcreateserial -extfile ${PROJECT_ROOT}/domains.ext -out localhost.crt
+    openssl req -new -nodes -newkey rsa:4096 -keyout localhost.key -out localhost.csr -subj "/C=US/ST=YourState/L=YourCity/O=${PROJECT_NAME}/CN=localhost.local"
+    openssl x509 -req -sha256 -days 1024 -in localhost.csr -CA ${PROJECT_NAME}.pem -CAkey ${PROJECT_NAME}.key -CAcreateserial -extfile ${PROJECT_ROOT}/config/domains.ext -out localhost.crt
 
     # Add new localhost.crt to your keychain as 'Always Trusted'
     printf "\e[0;34m\nAdding new cert to keychain and setting as 'Always Trust - If prompted, please enter your 'sudo' password below.\e[0m\n\n'"
@@ -89,7 +96,7 @@ function cert_check() {
 
         case $CERTS_BOOL in 
         y|Y|yes)
-            build_certs
+            build_local_certs
         ;;
         n|N|No)
             printf "\n Exiting, please add certs and restart this script or use the generate certs option...\n\n"
@@ -99,8 +106,34 @@ function cert_check() {
     fi
 }
 
+function create_root_cert(){
+    printf "\e[0;34mConfiguring Root and Intermediate CA, please wait...\e[0m\n"
+    sleep 5
+    vault login ${VR_TOKEN} 2>/dev/null
+    vault write -field=certificate pki_engine/root/generate/internal \
+        common_name="${PROJECT_NAME}.com" \
+        ttl=87600h > ${PROJECT_ROOT}/config/root_ca_cert.crt
+
+    vault write pki_engine/config/urls \
+        issuing_certificates="http://127.0.0.1:8200/v1/pki_engine/ca" \
+        crl_distribution_points="http://127.0.0.1:8200/v1/pki_engine/crl"
+
+    vault write -format=json pki_int/intermediate/generate/internal \
+        common_name="${PROJECT_NAME}.com Intermediate Authority" \
+        | jq -r '.data.csr' > ${PROJECT_ROOT}/config/pki_intermediate.csr
+
+    vault write -format=json pki_engine/root/sign-intermediate csr=@${PROJECT_ROOT}/config/pki_intermediate.csr \
+        format=pem_bundle ttl="43800h" \
+        | jq -r '.data.certificate' > ${PROJECT_ROOT}/config/pki_intermediate.cert.pem
+
+    vault write pki_int/intermediate/set-signed certificate=@${PROJECT_ROOT}/config/pki_intermediate.cert.pem
+
+    PKI_ENGINE=true
+}
+
 function orchestrator(){
-    if pip3 show requests >/dev/null 2>&1; then
+    if ls /Library/Python/2.7/site-packages/ | grep -q "requests"
+    then
         continue
     else
         # Install Python module 'requests'
@@ -108,14 +141,24 @@ function orchestrator(){
         sudo easy_install requests==2.22.0
     fi
 
-    # Generate a cert for our app
-    printf "\e[0;34m\nStarting certificate genration - please enter the common name you wish to use: \e[0m"
-    read COMMON_NAME
-    python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${VR_TOKEN} -U "https://localhost:8200" -C ${COMMON_NAME}
-    #sh ${PROJECT_ROOT}/terraform/orchestrator/generate_certs.sh
+    # Make App dir and generate a cert for our app
+    mkdir ${PROJECT_ROOT}/config/${APP_NAME} && cd $_
+    printf "\e[0;34m\nCreating Application Certificats in:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n\n"
+    python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${VR_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
+    cd - >/dev/null 2>&1
+
+    cd ${PROJECT_ROOT}/terraform/orchestrator/tls
+    printf "\e[0;34m\nCerts Created, Creating Cert Auth Role:\e[0m ${APP_NAME}\n\n"
+    sleep 2
+    terraform init
+    terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}"
+    cd - >/dev/null
+
     cd ${PROJECT_ROOT}/terraform/orchestrator/provisioner
-    # terraform init
-    # terraform apply 
+    printf "\e[0;34m\nCreating Provisioner Token to be used when deplaying:\e[0m ${APP_NAME}\n\n"
+    sleep 2
+    terraform init
+    terraform apply -var="vault_token=${VR_TOKEN}"
     cd - >/dev/null 2>&1
 }
 
@@ -146,13 +189,9 @@ function reset_local(){
         printf "\e[0;34m\nClearing apps, Consul, Orchestrator, Vault and Consul data\e[0m\n"
         rm -rf ${PROJECT_ROOT}/_data
         rm -rf ${PROJECT_ROOT}/localhost.crt ${PROJECT_ROOT}/localhost.key
-        printf "\e[0;34m\nRecursively deleting:\n\n\e[0m.terraform | terraform.tfstate.d | terraform.tfstate | terraform.tfstate.backup | backend.tf\e[0;34m\n\nfrom\n\n\e[0m ${PROJECT_ROOT}/terraform/\n"
+        printf "\e[0;34m\nRecursively deleting the following files from\e[0m ${PROJECT_ROOT}/terraform:\n\n.terraform | terraform.tfstate.d | terraform.tfstate | terraform.tfstate.backup | backend.tf\e[0;34m\n\n"
         for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
-            find . -type f -name ".terraform" -delete
-            find . -type f -name "terraform.tfstate.d" -delete
-            find . -type f -name "terraform.tfstate" -delete
-            find . -type f -name "terraform.tfstate.backup" -delete
-            find . -type f -name "backend.tf" -delete 
+            find ${directory}/ -type f \( -name ".terraform" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
         done
     ;;
     n|N|No)
@@ -166,8 +205,7 @@ function reset_local(){
    # If true, remove all certs found in the project config dir - otherwise, call the method to verify needed certs exist. 
     case $CERTS_BOOL in 
     y|Y|yes)
-        rm -f ${PROJECT_ROOT}/config/*.crt ${PROJECT_ROOT}/config/*.key 
-        build_certs
+        build_local_certs
     ;;
     n|N|no)
         cert_check
@@ -176,8 +214,7 @@ function reset_local(){
 }
 
 function set_backend(){
-    # BACKEND_PATHS=`find ${PROJECT_ROOT}/terraform/* -type d | sed s@//@/@`
-    # echo ${BACKEND_PATHS}
+    sleep 2
     for directory in $(find ${PROJECT_ROOT}/terraform -type d -mindepth 1 -maxdepth 3 | sed s@//@/@); do
         if [[ ${directory} == *tls* ]] | [[ ${directory} == *provisioner* ]] | [[ ${directory} == *orchestrator* ]]; then
           continue
@@ -207,12 +244,14 @@ function unseal_vault(){
 
 #### Script Starts Here ####
 
-# Set project root directory
+# Set project config
+VAULT_SKIP_VERIFY=true
+export VAULT_ADDR=https://127.0.0.1:8200
 PROJECT_ROOT=$(dirname $(cd `dirname $0` && pwd))
 KEYS_FILE="${PROJECT_ROOT}/_data/keys.txt"
 
 printf "\e[0;32m\n## Vault/Consul ##\e[0m\n\n"
-printf "\e[0;31m\nHint:\e[0m If you've already run this script and just need to start compose, run \e[0m\e[0;34m'docker-compose up'\e[0m from the project root. Your unseal keys and root token are stored in:\e[0m\e[0;34m ${KEYS_FILE}\e[0m\n\n"
+printf "\e[0;31m\nHint:\e[0m If you've already run this script and just need to start compose, run \e[0m\e[0;34m'docker-compose up'\e[0m from the project root.\nYour unseal keys and root token are stored in:\e[0m\e[0;34m ${KEYS_FILE}\e[0m\n\n"
 
 printf '\e[0;34m%-6s\e[m' "Name your project: " 
 read PROJECT_NAME
@@ -220,53 +259,51 @@ read PROJECT_NAME
 export TF_VAR_env=${PROJECT_NAME}
 
 # Clean old files and compose projects 
-printf "\e[0;31m\nPlease note: \e[0mYou should stop any running docker containers previously used with this project before attempting to clean old files\n\n"
+printf "\e[0;31m\nPlease note: \e[0mYou should stop any running docker containers previously used with this project before attempting to clean previously used config files\n\n"
 reset_local
 
 # If you did not clean all configs etc skip starting a new compose project, configure TF backend to consul and unseal vault
 case $RESET_BOOL in
-  y|Y|yes|Yes) 
-      printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-      docker-compose -f docker-compose.yml up -d  
-       
-      # Advise we are waiting for the project to complete the startup process 
-      printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-      until vault status | grep -q "Key" 
-      do
-          # >/dev/null 2>&1
-          printf "\e[0;35m.\e[0m"
-          sleep 3
-      done
+    y|Y|yes|Yes) 
+        # Start the new project in dettached docker 
+        printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+        cd ${PROJECT_ROOT}
+        docker-compose -f docker-compose.yml up -d  
 
-      # Setup terraform backend
-      printf "\e[0;34m\n\nSetting TF backend to our consul cluster\e[0m\n\n"
-      set_backend
-  
-      export VAULT_SKIP_VERIFY=true
-      export VAULT_ADDR=https://localhost:8200
-  
-      # init Vault
-      vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
-      export VAULT_TOKEN=$(cat ${KEYS_FILE} | awk '/Root Token:/{print substr($4, 1, length($4)-1)}')
-  
-      printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
-      sleep 2
-  
-      # Unseal Vault
-      unseal_vault
-  
-  ;;
-  n|N|No|no)
-        if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
-            sleep 2
-            # Unseal Vault
-            unseal_vault
-        fi
-  ;;
+        # Advise we are waiting for the project to complete the startup process 
+        printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+        until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault" 
+        do
+            # >/dev/null 2>&1
+            printf "\e[0;35m.\e[0m"
+            sleep 3
+        done
+
+        # Setup terraform backend
+        printf "\e[0;34m\n\nSetting TF backend to our consul cluster\e[0m\n\n"
+        set_backend
+
+        # init Vault
+        vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
+
+        # Unseal Vault
+        printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
+        sleep 2
+        unseal_vault
+    ;;
+    n|N|No|no)
+          if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
+              sleep 2
+              # Unseal Vault
+              unseal_vault
+          fi
+    ;;
 esac
 
 # Get the vault root token and your local ip
-VR_TOKEN=`cat ./_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
+VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
+export VAULT_TOKEN="${VR_TOKEN}"
+vault login ${VR_TOKEN} >/dev/null
 
 # Bootstrap the vault configuration
 printf "\e[0;34mDo you want to bootstap Vault? \e[0m"
@@ -274,26 +311,40 @@ read BOOTSTRAP
 
 case $BOOTSTRAP in
 y|Y|yes)
-    bootstrap_vault ${VR_TOKEN} ${PROJECT_NAME}
+    bootstrap_vault
 ;;
 *)
-    printf "\e[0;34m\nSkipping Bootstrap\n\e[0m"
+    printf "\e[0;34m\nSkipping Bootstrap\n\n\e[0m"
 ;;
 esac
 
-# Setup AppRoles and Associated tokens
-#app_roles
+if ${PKI_ENGINE};
+then
+    printf "\e[0;34mVault setup complete, would you like to test dynamic cert_auth then generating a dynamic database secret? \e[0m"
+    read DYNAMIC_TEST
 
-# # Setup tf orchestrator 
-orchestrator
+    case ${DYNAMIC_TEST} in
+    y|Y|yes)
+        # Get app name
+        printf "\e[0;34m\nStarting certificate genration - please enter the app name you wish to use: \e[0m"
+        read APP_NAME
 
-# #### Change dir from script starting location to terraform/orchestrator/provisioner 
-# terraform init 
-# terraform apply ## Add auto apply flag 
-# ## Take token from above command the set to var and export as VR_Token
-# # Cd to terraform/orchestrator/tls 
-# terraform init
-# terraform apply ## Add auto apply flag 
+        # Setup AppRoles and Associated tokens
+        #app_roles
 
+        # # Setup tf orchestrator 
+        orchestrator
 
-# Verify all certs are created and 
+        # #### Change dir from script starting location to terraform/orchestrator/provisioner 
+        # terraform init 
+        # terraform apply ## Add auto apply flag 
+        # ## Take token from above command the set to var and export as VR_Token
+        # # Cd to terraform/orchestrator/tls 
+        # terraform init
+        # terraform apply ## Add auto apply flag 
+    ;;
+    esac
+
+else
+    printf "\e[0;34m\nVault setup complete, re-run script at anytime to update config or bootstrap further\e[0m\n"
+fi

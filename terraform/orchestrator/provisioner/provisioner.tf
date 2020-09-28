@@ -39,9 +39,7 @@ resource "vault_token" "master-provisioner" {
 
 output "master_provisioner_token" {
   value     = vault_token.master-provisioner.client_token
-  sensitive = true
+  #sensitive = true
 }
 
-variable "vault_token" {
 
-}
