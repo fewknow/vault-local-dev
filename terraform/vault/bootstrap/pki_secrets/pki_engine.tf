@@ -1,26 +1,28 @@
 # Engine the PKI Secret Engine
-resource "vault_pki_secret_backend" "pki_engine" {
+resource "vault_mount" "pki_engine" {
   path                      = "pki_engine"
   default_lease_ttl_seconds = 3600
   max_lease_ttl_seconds     = 87600
+  type                      = "pki"
 }
 
 resource "vault_pki_secret_backend_crl_config" "crl_config" {
-  depends_on                = ["vault_pki_secret_backend.pki_engine"]
-  backend                   = vault_pki_secret_backend.pki_engine.path
+  depends_on                = [vault_mount.pki_engine]
+  backend                   = vault_mount.pki_engine.path
   expiry                    = "8760h"
   disable                   = false
 }
 
-resource "vault_pki_secret_backend" "pki_engine_int" {
+resource "vault_mount" "pki_engine_int" {
   path                      = "pki_int"
   default_lease_ttl_seconds = 3600
   max_lease_ttl_seconds     = 87600
+  type                      = "pki"
 }
 
 resource "vault_pki_secret_backend_crl_config" "crl_config_int" {
-  depends_on                = ["vault_pki_secret_backend.pki_engine_int"]
-  backend                   = vault_pki_secret_backend.pki_engine_int.path
+  depends_on                = [vault_mount.pki_engine_int]
+  backend                   = vault_mount.pki_engine_int.path
   expiry                    = "8760h"
   disable                   = false
 }
@@ -28,7 +30,7 @@ resource "vault_pki_secret_backend_crl_config" "crl_config_int" {
 # tls-auth-issuer-role creates a Vault role which will have permissions to issue TLS
 # auth certs.
 resource "null_resource" "tls-auth-issuer-role" {
-  depends_on = ["vault_pki_secret_backend_crl_config.crl_config_int"]
+  depends_on = [vault_pki_secret_backend_crl_config.crl_config_int]
   provisioner "local-exec" {
     command = <<EOF
             curl \
