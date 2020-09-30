@@ -357,8 +357,8 @@ printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker 
 reset_local
 
 # If you did not clean all configs etc skip starting a new compose project, configure TF backend to consul and unseal vault
-case $RESET_BOOL in
-y|Y|yes|Yes) 
+if ! curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault";
+then
     # Start the new project in dettached docker 
     printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
     cd ${PROJECT_ROOT}
@@ -385,15 +385,13 @@ y|Y|yes|Yes)
     printf "\e[0;34m\n\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
     sleep 2
     unseal_vault
-;;
-n|N|No|no)
+else
     if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
         sleep 2
         # Unseal Vault
         unseal_vault
     fi
-;;
-esac
+fi
 
 # Get the vault root token and your local ip
 VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`

@@ -67,7 +67,7 @@ path "auth/*" {
 EOT
 }
 
-resource "vault_policy" "App-policy" {
+resource "vault_policy" "mssql-policy" {
   name = "mssql-provisioner-policy"
 
   policy = <<EOT
