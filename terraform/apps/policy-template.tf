@@ -74,6 +74,9 @@ resource "vault_policy" "mssql-policy" {
 path "mssql/creds/${var.app}*" {
     capabilities = ["read", "list", "create", "update"]
 }
+path "mssql/roles/${var.app}*" {
+    capabilities = ["read", "list", "create", "update"]
+}
 EOT
 }
 

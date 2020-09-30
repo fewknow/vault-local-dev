@@ -48,6 +48,7 @@ function bootstrap_vault(){
         elif [ ${MODULE} == "cert_auth" ]
         then
             printf "\e[1;32mCerts: [\n${PROJECT_ROOT}/config/${PROJECT_NAME}.crt\n${PROJECT_ROOT}/config/${PROJECT_NAME}.key\n]\n"
+
         fi
          cd - >/dev/null 2>&1
         ;;
@@ -164,7 +165,7 @@ function dynamic_db_login(){
 
     # Create a database role with our master provisioner token
     printf "\e[0;34m\nCreating database role\n\e[0m"
-    vault write database/roles/${APP_NAME}-role \
+    vault write mssql/roles/${APP_NAME}-role \
     db_name=business-support-it-dev \
     creation_statements="CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';\
         CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
@@ -211,12 +212,13 @@ function orchestrator(){
     python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${VR_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
     cd - >/dev/null 2>&1
 
-    ls -lah ${PROJECT_ROOT}/config/${APP_NAME} #| grep "*.crt\|*.pem"
+    ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
 
-    read -n 1 -s -r -p "Press any key to continue"
+    printf "\e[0;34m\nNote the path above, you will need this to reference your new certs for login - Press any key to continue\e[0m"
+    read -n 1 -s -r
     # Generate a new token to use for provisioning our application 
     cd ${PROJECT_ROOT}/terraform/orchestrator/provisioner >/dev/null 2>&1
-    printf "\e[0;34m\nCreating Provisioner Token to be used when deploying from CI/CD - Using for Application:\e[0m ${APP_NAME}\n\n"
+    printf "\e[0;34m\n\nCreating Provisioner Token to be used when deploying from CI/CD - Using for Application:\e[0m ${APP_NAME}\n\n"
     sleep 3
     terraform init
     terraform apply -var="vault_token=${VR_TOKEN}"
@@ -230,7 +232,7 @@ function orchestrator(){
     read -n 1 -s -r -p "Press any key to continue"
     # Create new role and tie it to our newly gerenated appliction certs 
     cd ${PROJECT_ROOT}/terraform/orchestrator/tls
-    printf "\e[0;34m\nCreating Cert Auth Role with the Master Provisioner Token created in the previous step.\n\n"
+    printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token created in the previous step.\n\n"
     sleep 3
     terraform init
     terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}"
@@ -261,6 +263,7 @@ function reset_local(){
     # If true, delete all previous terraform configs, states etc.
     case $RESET_BOOL in 
     y|Y|yes)
+        # Remove TF Configs
         printf "\e[0;34m\nClearing apps, Consul, Orchestrator, Vault and Consul data\e[0m\n"
         rm -rf ${PROJECT_ROOT}/_data
         rm -rf ${PROJECT_ROOT}/localhost.crt ${PROJECT_ROOT}/localhost.key
@@ -268,6 +271,19 @@ function reset_local(){
             find ${directory}/ -type f \( -name ".terraform" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
             printf "\e[0;35m.\e[0m"
         done
+
+        # Remove app directories from previous projects
+        for directory in $(find ${PROJECT_ROOT}/config -type d -mindepth 1 | sed s@//@/@); do
+            rm -rf ${directory}
+            printf "\e[0;35m.\e[0m"
+        done
+
+        # 
+        # for file in $(find ${PROJECT_ROOT}/config -type f -not -name "*.hcl" | sed s@//@/@); do
+        #     rm -rf ${file}
+        #     printf "\e[0;35m.\e[0m"
+        # done
+        
     ;;
     n|N|No)
     ;;
@@ -356,8 +372,8 @@ export TF_VAR_env=${PROJECT_NAME}
 printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker containers previously used with this project before attempting to clean previously used config files\e[0m\n\n"
 reset_local
 
-# If you did not clean all configs etc skip starting a new compose project, configure TF backend to consul and unseal vault
-if ! curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault";
+# Check if docker is already running with a vault image
+if ! docker ps 2>/dev/null | grep -q "vault";
 then
     # Start the new project in dettached docker 
     printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
