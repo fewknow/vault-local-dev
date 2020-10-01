@@ -2,7 +2,7 @@
 # when updating something in vault.
 
 resource "vault_policy" "apps-policy" {
-  name = "vault-agent-policy"
+  name = "approle-provisioner-policy"
 
   policy = <<EOT
 

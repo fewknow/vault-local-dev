@@ -61,24 +61,38 @@ resource "vault_policy" "App-policy" {
   name = "${var.app}-policy"
 
   policy = <<EOT
-path "auth/*" {
+  path "auth/*" {
     capabilities = ["create", "read", "update", "delete", "list", "sudo"]
-}
-EOT
+  }
+  #Allow token to manage itself
+  path "auth/token/create" {
+    capabilities = [ "update" ]
+  }
+
+  # Allow creating dynamic db creds for this app
+  path "mssql/creds/${var.app}*" {
+    capabilities = ["read", "list", "create", "update"]
+  }
+
+  # Work read mssql secrets engine role config for this app
+  path "mssql/roles/${var.app}*" {
+    capabilities = [ "read", "list" ]
+  }
+  EOT
 }
 
-resource "vault_policy" "mssql-policy" {
-  name = "mssql-provisioner-policy"
+# resource "vault_policy" "mssql-policy" {
+#   name = "mssql-provisioner-policy"
 
-  policy = <<EOT
-path "mssql/creds/${var.app}*" {
-    capabilities = ["read", "list", "create", "update"]
-}
-path "mssql/roles/${var.app}*" {
-    capabilities = ["read", "list", "create", "update"]
-}
-EOT
-}
+#   policy = <<EOT
+# path "mssql/creds/${var.app}*" {
+#     capabilities = ["read", "list", "create", "update"]
+# }
+# path "mssql/roles/${var.app}*" {
+#     capabilities = ["read", "list", "create", "update"]
+# }
+# EOT
+# }
 
 resource "vault_policy" "tls-policy" {
   name = "tls-auth-issuer-role-policy"

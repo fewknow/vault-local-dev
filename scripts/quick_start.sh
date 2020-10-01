@@ -19,8 +19,11 @@
 ## Script designed to automate the setup of this entire project. 
 function app_policies(){
     # Function to create policies for apps and databases
+    printf "\e[0;34m\nCreating ${APP_NAME} polcies\e[0m\n\n"
+    sleep 3
+
     cd ${PROJECT_ROOT}/terraform/apps
-    terraform init
+    terraform init >/dev/null
     terraform apply -var="token=${VR_TOKEN}" -var="app=${APP_NAME}"
     cd - >/dev/null 2>&1
 
@@ -28,7 +31,7 @@ function app_policies(){
 
 function bootstrap_vault(){
     # Function to bootstrap vault with terraform
-    for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@); do
+    for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@ | sort); do
         printf "\e[0;34m\nPATH:\e[0m $DIR\n"
         MODULE="$(basename $(dirname ${DIR}/backend.tf))"
 
@@ -39,7 +42,7 @@ function bootstrap_vault(){
         case $TO_BOOTSTRAP in
         y|Y|yes)
          cd ${DIR} 
-         terraform init -backend-config="${PROJECT_ROOT}/terraform/local-backend.config" | head -n 7
+         terraform init -backend-config="${PROJECT_ROOT}/terraform/local-backend.config" >/dev/null
          terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
          if [ ${MODULE} == "pki_secrets" ]
          then
@@ -137,8 +140,40 @@ function create_root_ca(){
 
     vault write pki_int/intermediate/set-signed certificate=@${PROJECT_ROOT}/config/pki_intermediate.cert.pem
 
-    printf "\n\e[0;34mContinuing Vault bootstrap process...\e[0m\n"
+    #printf "\n\e[0;34mContinuing Vault bootstrap process...\e[0m\n"
     PKI_ENGINE=true
+}
+
+function create_db_connection(){
+    # Create database 
+    printf "\e[0;34m\nCreating demo ${APP_NAME} database...\e[0m"
+    docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Testing123 -Q "create database ${APP_NAME};"
+
+    #curl --request POST --data @payload.json https://127.0.0.1:8200/v1/auth/approle/login
+    # Call demo sql tf module
+    printf "\e[0;34m\nCreating App database connection and role\e[0m\n"
+    cd ${PROJECT_ROOT}/terraform/demo/dynamic_cert-dynamic_db_creds
+    terraform init >/dev/null
+
+    printf "\e[0;34mPlease enter db password as defined in the docker-compose file: \e[0m"
+    read DB_PASSWORD
+
+    terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}" -var="sql_pass=${DB_PASSWORD}" -var="sql_user=sa"
+    cd - >/dev/null
+
+    # Create a database role with our master provisioner token
+    # export VAULT_TOKEN=${PROVISIONER_TOKEN}
+    # echo ${PROVISIONER_TOKEN}
+    # sleep 300
+    # printf "\e[0;34m\nCreating database role\n\e[0m"
+    # vault write mssql/roles/${APP_NAME}-role \
+    # db_name=${APP_NAME}\
+    # creation_statements="CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';\
+    #     CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
+    #     GRANT SELECT ON SCHEMA::dbo TO [{{name}}];" \
+    # default_ttl="1h" \
+    # max_ttl="24h" \
+
 }
 
 function dynamic_cert_login(){
@@ -161,28 +196,43 @@ function dynamic_cert_login(){
 }
 
 function dynamic_db_login(){
-    # Function to git the database endpoint for vault, generate new db creds - then login to the database
-
-    # Create a database role with our master provisioner token
-    printf "\e[0;34m\nCreating database role\n\e[0m"
-    vault write mssql/roles/${APP_NAME}-role \
-    db_name=business-support-it-dev \
-    creation_statements="CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';\
-        CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
-        GRANT SELECT ON SCHEMA::dbo TO [{{name}}];" \
-    default_ttl="1h" \
-    max_ttl="24h"
-
-    # Set the vault token we just created from the dynamic cert login
-    export VAULT_TOKEN=${CERT_TOKEN}
+    # Function to read db creds and  login to the database
     
     # Get the creds for the sql database
     printf "\e[0;34m\nGenerating new database creds with the token created in the previous cert login step\e[0m\n"
-    vault read mssql/creds/${APP_NAME}-role
+    curl --header "X-Vault-Token: ${CERT_TOKEN}" http://127.0.0.1:8200/v1/database/creds/${APP_NAME}-role | tee ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
 
     # Login to the sql database and list tables
-    printf "\e[0;34m\nLogging into the MSSQL database with the creds provided.\e[0m\n"
+    printf "\e[0;34m\nLogging into the MSSQL database with the creds provided...\e[0m\n"
+    docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q "select name from sys.databases;"
 
+    # Once complete, ask if we should clean the demo app configs - database, certs, cert roles, polices, database roles and connections
+    printf "\e[0;34m\nYou have now completed this demo. As a quick recap we:\e[0m\n"
+    printf "  1. Created a Master Token use for Provisioning our App\n"
+    printf "  2. Used our new token to: \n"
+    printf "    a. Create Policies for our app to request db creds\n"
+    printf "    b. Create a database connection resource.\n"
+    printf "    c. Create a database role for our app\n"
+    printf "    d. Generate new certs for this app with the PKI Engine.\n"
+    printf "    e. Create a new cert/TLS auth role referencing our new app cert.\n"
+    printf "  3. Logged in with our new app cert.\n"
+    printf "  4. Requested new db creds.\n"
+    printf "  5. Logged into the database to verify the new creds.\n"
+
+    printf "\e[0;34m\nShould we clean-up the demo config? \e[0m"
+    read CLEAN_DEMO
+
+    case $CLEAN_DEMO in
+    y|Y|yes)
+
+        docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Testing123 -Q "drop database ${APP_NAME};"
+    ;;
+    *)
+        printf "\e[0;34m\nScript compelete, re-run at anytime to update the vault config...\e[0m\n"
+        exit 0
+    ;;
+    esac
+    
 }
 
 function orchestrator(){
@@ -196,11 +246,11 @@ function orchestrator(){
     fi
 
     # Make the application config directory
-    if ! ls ${PROJECT_ROOT}/config/${APP_NAME};
+    if ! ls ${PROJECT_ROOT}/config/${APP_NAME} 2>/dev/null;
     then
         mkdir ${PROJECT_ROOT}/config/${APP_NAME}
     else
-        rm -f ${PROJECT_ROOT}/config/${APP_NAME}
+        rm -rf ${PROJECT_ROOT}/config/${APP_NAME}
         mkdir ${PROJECT_ROOT}/config/${APP_NAME}
     fi
 
@@ -214,28 +264,27 @@ function orchestrator(){
 
     ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
 
-    printf "\e[0;34m\nNote the path above, you will need this to reference your new certs for login - Press any key to continue\e[0m"
+    printf "\e[0;31m\nNote:\e[0m Copy the path above, as well as note the cert and key names. You will need these to use as reference for cert auth later - Press any key to continue"
     read -n 1 -s -r
     # Generate a new token to use for provisioning our application 
     cd ${PROJECT_ROOT}/terraform/orchestrator/provisioner >/dev/null 2>&1
     printf "\e[0;34m\n\nCreating Provisioner Token to be used when deploying from CI/CD - Using for Application:\e[0m ${APP_NAME}\n\n"
     sleep 3
-    terraform init
+    terraform init >/dev/null
     terraform apply -var="vault_token=${VR_TOKEN}"
     printf "\e[0;34m\nNote:\e[0m This token is created to ensure 'root' permissions are not given to the pipeline as well as for audit purposes\n\n"
     
     # Get the new token and set as the vault root token
-    VR_TOKEN=`terraform output -json master_provisioner_token | tr -d '"'`
-    export VAULT_TOKEN=${VR_TOKEN}
+    PROVISIONER_TOKEN=`terraform output -json master_provisioner_token | tr -d '"'`
     cd - >/dev/null 2>&1
 
     read -n 1 -s -r -p "Press any key to continue"
     # Create new role and tie it to our newly gerenated appliction certs 
     cd ${PROJECT_ROOT}/terraform/orchestrator/tls
-    printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token created in the previous step.\n\n"
+    printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token and newly created application tls certs.\n\n"
     sleep 3
-    terraform init
-    terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}"
+    terraform init >/dev/null
+    terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}"
     cd - >/dev/null
 }
 
@@ -440,7 +489,7 @@ then
     printf "    5. With your Cert token, generate a database username and password via the bootstraped mssql enable\n"
     printf "    6. Authenticate into the MSSQL database with your new creds\n\n"
 
-    printf "\e[0;34mContinue with the dynamic auth example? \e[0m"
+    printf "\e[0;34mContinue with the dynamic auth demo? \e[0m"
     read DYNAMIC_TEST
 
     case ${DYNAMIC_TEST} in
@@ -452,8 +501,11 @@ then
         # Setup AppRoles and Associated tokens
         app_policies
 
-        # # Setup tf orchestrator 
+        # Setup tf orchestrator 
         orchestrator
+
+        # Create demo db config
+        create_db_connection
 
         # Ask if they would like to test cert auth
         printf "\n\e[0;34mLogging in with the newly generated application certificate\n\n\e[0m"
