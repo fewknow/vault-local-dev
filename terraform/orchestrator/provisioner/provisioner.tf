@@ -31,17 +31,38 @@ resource "vault_token" "master-provisioner" {
     "cert-role-issuer-policy",
     "mssql-provisioner-policy",
     "acl-provisioner-policy",
-    "ad-provisioner-policy"
+    "ad-provisioner-policy",
+    "master-provisioner-policy"
   ]
   ttl = "5m"
   #num_uses     = 1
 }
 
+resource "vault_policy" "master-provisioner-policy" {
+  name = "master-provisioner-policy"
+
+  policy = <<EOT
+  path "auth/token/lookup-accessor" {
+  capabilities = ["update"]
+  }
+
+  path "auth/token/create" {
+    capabilities = ["update" , "create", "sudo"]
+  }
+
+  path "auth/token/lookup" {
+    capabilities = ["read"]
+  }
+
+  path "auth/token/revoke-accessor" {
+    capabilities = ["update"]
+  }
+  EOT
+}
+
 output "master_provisioner_token" {
   value     = vault_token.master-provisioner.client_token
-  sensitive = true
+  #sensitive = true
 }
 
-variable "vault_token" {
 
-}

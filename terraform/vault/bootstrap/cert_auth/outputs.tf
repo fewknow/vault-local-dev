@@ -2,6 +2,10 @@ output "path" {
   value = vault_auth_backend.cert.path
 }
 
-output "policies" {
-  value = [vault_policy.tls-auth-certificate-issuer-policy.name,vault_policy.tls-auth-issuer-role-policy.name,vault_policy.admin-cert-policy.name]
+output "attached_policies" {
+  value = vault_cert_auth_backend_role.project_cert.token_policies
+}
+
+output "vault_project_cert_role" {
+  value = vault_cert_auth_backend_role.project_cert.name
 }

@@ -19,20 +19,11 @@ terraform {
 # it will return a token that is mapped to the service(app) policy.
 resource "vault_cert_auth_backend_role" "cert" {
   name                 = var.app
-  certificate          = file("../ca-cert.pem")
+  certificate          = file("../../../config/${var.app}/ca-cert.pem")
   backend              = "cert"
-  allowed_common_names = [var.app]
+  allowed_common_names = ["${var.app}.com"]
   token_ttl            = 300
   token_max_ttl        = 2628000
 
-  token_policies = ["${var.app}-policy"]
-}
-
-variable "vault_token" {  
-  description = "Vault token"
-}
-
-# This is the application name that will be used to create the tls backend role.
-variable "app" {
-  description = "Application / Deployable unit name"
+  token_policies = ["${var.app}-policy", "mssql-provisioner-policy"]
 }

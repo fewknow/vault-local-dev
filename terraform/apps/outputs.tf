@@ -1,4 +1,4 @@
 # Relevant for Jenkins creating certificates
-output "policy_names" {
-  value = local.policy_names
-}
+# output "policy_names" {
+#   value = 
+# }

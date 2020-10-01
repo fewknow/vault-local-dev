@@ -8,7 +8,16 @@ resource "vault_approle_auth_backend_role" "role" {
   depends_on            = [vault_auth_backend.approle]
   backend               = "approle"
   role_name             = var.role_name
-  token_policies       = ["default", "vault-agent-policy"]
+  token_policies       = [
+    "default",
+    "tls-auth-issuer-role-policy",
+    "tls-auth-certificate-issuer-policy",
+    "cert-role-issuer-policy",
+    "mssql-provisioner-policy",
+    "acl-provisioner-policy",
+    "ad-provisioner-policy",
+    "master-provisioner-policy"
+    ]
 }
 
 # Generate a secretID

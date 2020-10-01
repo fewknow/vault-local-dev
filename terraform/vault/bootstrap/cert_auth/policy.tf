@@ -15,7 +15,7 @@ resource "vault_policy" "tls-auth-certificate-issuer-policy" {
       # Create, update, and delete auth methods
       path "auth/cert/*"
       {
-        capabilities = ["read", "update"]
+        capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
       }
   EOT
 }

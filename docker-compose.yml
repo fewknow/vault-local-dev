@@ -31,7 +31,7 @@ services:
             - IPC_LOCK
         command: "server -config=/config/vault.hcl"
 
-    mssql:
+    mssql: # https://hub.docker.com/_/microsoft-mssql-server
         container_name: "mssql"
         image: "mcr.microsoft.com/mssql/server"
         environment:

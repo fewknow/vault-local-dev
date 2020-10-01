@@ -2,6 +2,10 @@
 import json
 import argparse
 import requests
+import urllib3
+
+# Disable warnings to localhost vault calls
+urllib3.disable_warnings()
 
 # initiate the parser allowing you to pass in parameters to the script and
 # having -h to see the avaible parameters.
@@ -33,7 +37,7 @@ HEADERS = {
     'Content-Type' : 'application/json',
     'X-Vault-Token' : ARGS.token
 }
-URL = "{u}/v1/tls-auth/issue/tls-auth-issuer-role".format(u=ARGS.url)
+URL = "{u}/v1/pki_int/issue/tls-auth-issuer-role".format(u=ARGS.url)
 DATA = {
     "common_name" : ARGS.commonname,
     "ttl" : ARGS.ttl
