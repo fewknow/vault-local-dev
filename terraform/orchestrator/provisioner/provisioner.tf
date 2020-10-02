@@ -51,7 +51,11 @@ resource "vault_policy" "master-provisioner-policy" {
   }
 
   path "auth/token/lookup" {
-    capabilities = ["read"]
+    capabilities = ["read", "list"]
+  }
+
+  path "auth/token/lookup-self" {
+    capabilities = ["read", "list"]
   }
 
   path "auth/token/revoke-accessor" {

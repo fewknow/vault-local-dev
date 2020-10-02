@@ -8,7 +8,7 @@ resource "vault_policy" "tls-auth-certificate-issuer-policy" {
       }
 
       # Work with tls-auth secrets engine
-      path "tls-auth/issue*" {
+      path "pki_int/issue*" {
         capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
       }
 
@@ -30,7 +30,7 @@ resource "vault_policy" "tls-auth-issuer-role-policy" {
     capabilities = [ "update" ]
   }
   # Work with tls-auth secrets engine
-  path "tls-auth/issue/tls-auth-issuer-role" {
+  path "pki_int/issue/tls-auth-issuer-role" {
     capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
   }
   EOT
