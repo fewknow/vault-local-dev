@@ -19,7 +19,7 @@
 ## Script designed to automate the setup of this entire project. 
 function app_policies(){
     # Function to create policies for apps and databases
-    printf "\e[0;34m\nCreating ${APP_NAME} application policies\e[0m\n\n"
+    printf "\e[0;34m\n\nCreating ${APP_NAME} application policies\e[0m\n\n"
     sleep 3
 
     cd ${PROJECT_ROOT}/terraform/apps
@@ -79,13 +79,18 @@ function build_local_certs(){
     printf "\e[0;34m\n\nGenerating CA Certs\e[0m\n\n"
     openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:4096 -keyout ${PROJECT_NAME}.key -out ${PROJECT_NAME}.pem -subj "/C=US/ST=YourState/L=YourCity/O=${PROJECT_NAME}/CN=localhost.local"
     openssl x509 -outform pem -in ${PROJECT_NAME}.pem -out ${PROJECT_NAME}.crt
+
+    printf "\e[0;34m\nSelf-signed Project certs created, these can be assigned to a cert auth role and referenced on login.\e[0m\n\n"
+    printf "${PWD}:\n"
+    ls ${PROJECT_ROOT}/config | grep "${PROJECT_NAME}.crt\|${PROJECT_NAME}.key" 
+
     # Generating Vault/Consul certificates
-    printf "\e[0;34mGenerating Vault/Consul Certs\e[0m\n\n"
+    printf "\e[0;34m\nGenerating Vault/Consul Certs\e[0m\n\n"
     openssl req -new -nodes -newkey rsa:4096 -keyout localhost.key -out localhost.csr -subj "/C=US/ST=YourState/L=YourCity/O=${PROJECT_NAME}/CN=localhost.local"
     openssl x509 -req -sha256 -days 1024 -in localhost.csr -CA ${PROJECT_NAME}.pem -CAkey ${PROJECT_NAME}.key -CAcreateserial -extfile ${PROJECT_ROOT}/config/domains.ext -out localhost.crt
 
     # Add new localhost.crt to your keychain as 'Always Trusted'
-    printf "\e[0;34m\nAdding new cert to keychain and setting as 'Always Trust - If prompted, please enter your 'sudo' password below.\e[0m\n\n'"
+    printf "\e[0;34m\nAdding new self-signed localhost cert to keychain and setting as 'Always Trust - If prompted, please enter your 'sudo' password below.\e[0m\n\n'"
     sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
     cd - >/dev/null 2>&1
 }
@@ -171,10 +176,18 @@ function create_db_connection(){
     vault write mssql/roles/${APP_NAME}-role \
     db_name=${APP_NAME}\
     creation_statements="CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';\
-        CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
-        GRANT SELECT ON SCHEMA::dbo TO [{{name}}];" \
+    CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
+    GRANT SELECT ON SCHEMA::dbo TO [{{name}}];" \
     default_ttl="1h" \
     max_ttl="24h" \
+
+    echo ""
+    vault read mssql/roles/${APP_NAME}-role
+
+    printf "\e[0;34m\n\nApplication auth, policies and role provisioning complete. You can now login with your pki generated certs, then grab your dynamic database password.\e[0m\n"
+
+    printf "\e[0;34m\nPress any key to continue\e[0m"
+    read -n 1 -s -r
 
 }
 
@@ -182,8 +195,9 @@ function dynamic_cert_login(){
     # Function designed to take user input for cert/private key to then use for cert_auth login into Vault
 
     # Print to screen the vault command which will be used for cert login - then login
-    printf "\e[0;34m\nTesting login with your new application cert and role - using the following command:\e[0m\n"
+    printf "\e[0;34m\n\nTesting login with your new application cert and role - using the following command:\e[0m\n"
     printf "\n\nvault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME}\n\n"
+    #curl --request POST --cert ${PROJECT_ROOT}/config/${APP_NAME}/cert.crt --key ${PROJECT_ROOT}/config/${APP_NAME}/private.crt --data "{\"name\": \"${APP_NAME}\"}" https://127.0.0.1:8200/v1/auth/cert/login > ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
     vault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME} | tee ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
     
     # Set the new token to a variable
@@ -193,11 +207,12 @@ function dynamic_cert_login(){
 
 function dynamic_db_login(){
     # Function to read db creds and  login to the database
-    read -n 1 -s -r -p "Press any key to continue"
+    printf "\e[0;34m\nPress any key to continue\n\e[0m"
+    read -n 1 -s -r
 
     # Get the creds for the sql database
     printf "\e[0;34m\nGenerating dynamic database credentials with our new token.\e[0m\n"
-    printf "\e[0;34mUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${CERT_TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
+    printf "\e[0;34m\nUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${CERT_TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
 
     curl --header "X-Vault-Token: ${CERT_TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
 
@@ -264,6 +279,9 @@ function orchestrator(){
     PROVISIONER_TOKEN=`terraform output -json master_provisioner_token | tr -d '"'`
     cd - >/dev/null 2>&1
 
+    printf "\e[0;34m\nPress any key to continue\e[0m"
+    read -n 1 -s -r
+
     # Setup AppRoles and Associated tokens
     app_policies
 
@@ -288,7 +306,7 @@ function orchestrator(){
     terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}"
     cd - >/dev/null
 
-    printf "\e[0;34m\nPress any key to continue\e[0m"
+    printf "\e[0;34m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
 
     # Create demo db config
@@ -500,9 +518,9 @@ then
     read -p ": " DEMO
 
     printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
-    printf "    1. Create Application and Provisioner token policies\n"
-    printf "    2. Generate a certificates via the PKI engine\n"
-    printf "    3. Generate a Provisoner Token with permission to create tokens and roles\n"
+    printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
+    printf "    2. Create Application and Provisioner token policies\n"
+    printf "    3. Generate a certificates via the PKI engine\n"
     printf "    4. With Provisioner Token, Create a Cert(TLS) Auth role, then login with the new cert and get the token\n"
     printf "    5. With your Cert token, generate a database username and password via the bootstraped mssql enable\n"
     printf "    6. Authenticate into the MSSQL database with your new creds\n\n"
