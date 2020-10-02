@@ -490,7 +490,7 @@ export VAULT_TOKEN="${VR_TOKEN}"
 #vault login ${VR_TOKEN} >/dev/null
 
 # Bootstrap the vault configuration
-printf "\e[0;34mDo you want to bootstap Vault? i.e Create example auth methods and secret engines? \e[0m"
+printf "\e[0;34mDo you want to bootstap Vault?\e[0m i.e Create example auth methods, secret engines, and policies? "
 read BOOTSTRAP
 
 case $BOOTSTRAP in
@@ -519,10 +519,10 @@ then
 
     printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
     printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
-    printf "    2. Create Application and Provisioner token policies\n"
-    printf "    3. Generate a certificates via the PKI engine\n"
-    printf "    4. With Provisioner Token, Create a Cert(TLS) Auth role, then login with the new cert and get the token\n"
-    printf "    5. With your Cert token, generate a database username and password via the bootstraped mssql enable\n"
+    printf "    2. Create Application specific policies\n"
+    printf "    3. Generate a app certificates via the PKI engine\n"
+    printf "    4. Create a Cert(TLS) Auth role, then login with the new cert and get the token\n"
+    printf "    5. Generate a database username and password via the bootstraped mssql enable\n"
     printf "    6. Authenticate into the MSSQL database with your new creds\n\n"
 
     case ${DEMO} in
