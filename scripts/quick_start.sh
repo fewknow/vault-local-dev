@@ -19,12 +19,12 @@
 ## Script designed to automate the setup of this entire project. 
 function app_policies(){
     # Function to create policies for apps and databases
-    printf "\e[0;34m\nCreating ${APP_NAME} application polcies\e[0m\n\n"
+    printf "\e[0;34m\nCreating ${APP_NAME} application policies\e[0m\n\n"
     sleep 3
 
     cd ${PROJECT_ROOT}/terraform/apps
     terraform init >/dev/null
-    terraform apply -var="token=${VR_TOKEN}" -var="app=${APP_NAME}"
+    terraform apply -var="token=${PROVISIONER_TOKEN}" -var="app=${APP_NAME}"
     cd - >/dev/null 2>&1
 
 }
@@ -76,7 +76,7 @@ function build_local_certs(){
     cd ${PROJECT_ROOT}/config
     rm -f *.pem *.crt *.key *.csr *.srl
     # Genrating CA
-    printf "\e[0;34m\nGenerating CA Certs\e[0m\n\n"
+    printf "\e[0;34m\n\nGenerating CA Certs\e[0m\n\n"
     openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:4096 -keyout ${PROJECT_NAME}.key -out ${PROJECT_NAME}.pem -subj "/C=US/ST=YourState/L=YourCity/O=${PROJECT_NAME}/CN=localhost.local"
     openssl x509 -outform pem -in ${PROJECT_NAME}.pem -out ${PROJECT_NAME}.crt
     # Generating Vault/Consul certificates
@@ -182,8 +182,8 @@ function dynamic_cert_login(){
     # Function designed to take user input for cert/private key to then use for cert_auth login into Vault
 
     # Print to screen the vault command which will be used for cert login - then login
-    printf "\e[0;34m\nTesting login with your new application cert and role\e[0m\n"
-    printf "\e[0;34m\nLogging in with the following command:\e[0m\n\nvault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME}\n\n"
+    printf "\e[0;34m\nTesting login with your new application cert and role - using the following command:\e[0m\n"
+    printf "\n\nvault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME}\n\n"
     vault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME} | tee ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
     
     # Set the new token to a variable
@@ -197,7 +197,8 @@ function dynamic_db_login(){
 
     # Get the creds for the sql database
     printf "\e[0;34m\nGenerating dynamic database credentials with our new token.\e[0m\n"
-    printf "\e[0;34mUsing the following command:\e[0m\ncurl --header \"X-Vault-Token: ${CERT_TOKEN}\" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n"
+    printf "\e[0;34mUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${CERT_TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
+
     curl --header "X-Vault-Token: ${CERT_TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
 
     DYN_DB_PASS=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $1}' | awk -F: '{print $2}'`
@@ -205,7 +206,7 @@ function dynamic_db_login(){
     
     printf "\e[0;34m\nDynamic Database Username:\e[0m ${DYN_DB_USER} \n\e[0;34mDynamic Database Password:\e[0m ${DYN_DB_PASS}\n"
     # Login to the sql database and list tables
-    printf "\e[0;34m\nTesting login into the MSSQL database with the creds above\e[0m\n\n"
+    printf "\e[0;34m\nTest login into the MSSQL database with the command below:\e[0m\n\n"
     printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
     #docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U $DYN_DB_USER -P $DYN_DB_PASS -Q 'select name from sys.databases;'
 
@@ -258,17 +259,20 @@ function orchestrator(){
     terraform init >/dev/null
     terraform apply -var="vault_token=${VR_TOKEN}"
     printf "\e[0;34m\nNote:\e[0m This token is created to ensure 'root' permissions are not given to the pipeline as well as for audit purposes\n\n"
-    cd - >/dev/null 2>&1
 
     # Get the new token and set as the vault root token
     PROVISIONER_TOKEN=`terraform output -json master_provisioner_token | tr -d '"'`
+    cd - >/dev/null 2>&1
+
+    # Setup AppRoles and Associated tokens
+    app_policies
 
     cd ${PROJECT_ROOT}/config/${APP_NAME}
     APP_DIR=`pwd`
 
     # Generate new certs for the app cert authentication
     printf "\e[0;34m\nWith Provisioner Token, creating application certs in:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n\n"
-    python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${VR_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
+    python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${PROVISIONER_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
     cd - >/dev/null 2>&1
 
     ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
@@ -281,14 +285,16 @@ function orchestrator(){
     printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token and newly created application TLS certs.\n\n"
     sleep 3
     terraform init >/dev/null
-    terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}"
+    terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}"
     cd - >/dev/null
+
+    printf "\e[0;34m\nPress any key to continue\e[0m"
+    read -n 1 -s -r
 
     # Create demo db config
     create_db_connection
 
     # Ask if they would like to test cert auth
-    printf "\n\e[0;34mLogging in with the newly generated application certificate\n\n\e[0m"
     dynamic_cert_login
     
     # Call dynamic database login function
@@ -483,12 +489,17 @@ y|Y|yes)
 ;;
 esac
 
+printf "\nBasic Vault setup complete!\n\nYou can now login to Vault with any of the auth methods bootstrapped.\n\n"
+
 # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
 if ${PKI_ENGINE};
 then
-    printf "\e[0;34m\nBasic Vault setup complete!\n"
 
-    printf "\e[0;34m\nNext, this script can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
+    printf "\e[0;34mNext, you can choose a demo to run from the list: \e[0m\n\n"
+    printf "1. Dynamic Database Secerts with TLS Auth\n\n"
+    read -p ": " DEMO
+
+    printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
     printf "    1. Create Application and Provisioner token policies\n"
     printf "    2. Generate a certificates via the PKI engine\n"
     printf "    3. Generate a Provisoner Token with permission to create tokens and roles\n"
@@ -496,23 +507,16 @@ then
     printf "    5. With your Cert token, generate a database username and password via the bootstraped mssql enable\n"
     printf "    6. Authenticate into the MSSQL database with your new creds\n\n"
 
-    printf "\e[0;34mContinue with the dynamic auth demo? \e[0m"
-    read DYNAMIC_TEST
-
-    case ${DYNAMIC_TEST} in
-    y|Y|yes)
+    case ${DEMO} in
+    1)
         # Get app name
         printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
         read APP_NAME
-
-        # Setup AppRoles and Associated tokens
-        app_policies
 
         # Setup tf orchestrator 
         orchestrator
     ;;
     esac
-
 else
     printf "\e[0;34m\nVault setup complete, re-run script at anytime to update config or bootstrap further\e[0m\n"
 fi

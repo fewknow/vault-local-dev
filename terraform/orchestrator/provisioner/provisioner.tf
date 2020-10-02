@@ -43,7 +43,7 @@ resource "vault_policy" "master-provisioner-policy" {
 
   policy = <<EOT
   path "auth/token/lookup-accessor" {
-  capabilities = ["update"]
+  capabilities = ["read", "list", "sudo"]
   }
 
   path "auth/token/create" {
@@ -55,7 +55,7 @@ resource "vault_policy" "master-provisioner-policy" {
   }
 
   path "auth/token/lookup-self" {
-    capabilities = ["read", "list"]
+    capabilities = ["read", "list", "sudo"]
   }
 
   path "auth/token/revoke-accessor" {

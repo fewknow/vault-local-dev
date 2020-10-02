@@ -4,26 +4,26 @@ provider "vault" {
 }
 
 
-# data "terraform_remote_state" "apps" {
-#   backend = "consul"
+data "terraform_remote_state" "apps" {
+  backend = "consul"
 
-#   config = {
-#     path = "vault/apps"
-#   }
-# }
+  config = {
+    path = "vault/apps"
+  }
+}
 
-# data "terraform_remote_state" "pki" {
-#   backend = "consul"
+data "terraform_remote_state" "pki" {
+  backend = "consul"
 
-#   config = {
-#     path = "vault/pki"
-#   }
-# }
+  config = {
+    path = "vault/pki"
+  }
+}
 
-# data "terraform_remote_state" "authmethods" {
-#   backend = "consul"
+data "terraform_remote_state" "authmethods" {
+  backend = "consul"
 
-#   config = {
-#     path = "vault/authmethods"
-#   }
-# }
+  config = {
+    path = "vault/authmethods"
+  }
+}
