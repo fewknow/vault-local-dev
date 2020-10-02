@@ -25,5 +25,5 @@ resource "vault_cert_auth_backend_role" "cert" {
   token_ttl            = 300
   token_max_ttl        = 2628000
 
-  token_policies = ["${var.app}-policy", "mssql-provisioner-policy"]
+  token_policies = ["${var.app}-policy"]
 }

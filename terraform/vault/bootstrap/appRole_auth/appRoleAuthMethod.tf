@@ -33,8 +33,8 @@ resource "local_file" "role_id" {
     file_permission   = "0600"
 }
 
-resource "local_file" "secret_id" {
-    content           = vault_approle_auth_backend_role_secret_id.role.secret_id
-    filename          = "../../../../_data/secretID"
-    file_permission   = "0600"
-}
+# resource "local_file" "secret_id" {
+#     content           = vault_approle_auth_backend_role_secret_id.role.secret_id
+#     filename          = "../../../../_data/secretID"
+#     file_permission   = "0600"
+# }

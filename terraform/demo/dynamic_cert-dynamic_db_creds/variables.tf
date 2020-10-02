@@ -14,7 +14,7 @@ variable "app" {
 
 variable "server_ip" {
     description = "Application name we're using for this demo"
-    default     = "localhost"
+    default     = "mssql"
 }
 
 variable "sql_pass" {
