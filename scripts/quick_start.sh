@@ -54,9 +54,6 @@ function bootstrap_vault(){
         elif [ ${MODULE} == "cert_auth" ]
         then
             printf "\e[1;32mCerts: [\n${PROJECT_ROOT}/config/${PROJECT_NAME}.crt\n${PROJECT_ROOT}/config/${PROJECT_NAME}.key\n]\n"
-            # Bool to check against for demo readiness
-            CERTS=true
-
         fi
          cd - >/dev/null 2>&1
         ;;
@@ -200,9 +197,6 @@ function create_root_ca(){
         | jq -r '.data.certificate' > ${PROJECT_ROOT}/config/pki_intermediate.cert.pem
 
     vault write pki_int/intermediate/set-signed certificate=@${PROJECT_ROOT}/config/pki_intermediate.cert.pem
-
-    #printf "\n\e[0;34mContinuing Vault bootstrap process...\e[0m\n"
-    PKI_ENGINE=true
 }
 
 function create_db_connection(){
