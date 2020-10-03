@@ -308,15 +308,6 @@ function orchestrator(){
 
     printf "\e[0;34m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
-
-    # Create demo db config
-    create_db_connection
-
-    # Ask if they would like to test cert auth
-    dynamic_cert_login
-    
-    # Call dynamic database login function
-    dynamic_db_login
 }
 
 function reset_local(){
@@ -405,7 +396,7 @@ function set_backend(){
 }
 
 function unseal_vault(){
-    printf "\e[0;34m\nAttempting unseal process now...\n\n\e[0m"
+    printf "\e[0;34m\n\nAttempting unseal process now...\n\n\e[0m"
     for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
         UNSEAL_KEY=${i}
         vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
@@ -427,14 +418,12 @@ KEYS_FILE="${PROJECT_ROOT}/_data/keys.txt"
 if ! which vault >/dev/null
 then
     printf "\e[0;34m\nVault not installed, please install to continue...\e[0m\n\n"
-    PRE_REQ=false
+    exit 0
 elif ! which terraform >/dev/null
 then
     printf "\e[0;34m\nTerraform not installed, please install to continue...\e[0m\n\n"
-    PRE_REQ=false
+    exit 0
 fi
-
-if ! $PRE_REQ;then exit 0;fi
 
 # Output warnings
 printf "\e[0;32m\n## Vault/Consul ##\e[0m\n\n"
@@ -444,7 +433,6 @@ printf "\e[0;31m\nHint:\e[0m If you've already run this script and just need to 
 printf "\e[0;34mName your project: \e[0m" 
 read PROJECT_NAME
 PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
-
 # Set environment so TF can pickup the var. 
 export TF_VAR_env=${PROJECT_NAME}
 
@@ -470,11 +458,13 @@ then
     done
 
     # init Vault
+    printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
     vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
 
     # Unseal Vault
-    printf "\e[0;34m\n\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
-    sleep 2
+    printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
+    printf "\e[0;34m\nPress any key to continue\e[0m"
+    read -n 1 -s -r
     unseal_vault
 else
     if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
@@ -509,32 +499,42 @@ esac
 
 printf "\nBasic Vault setup complete!\n\nYou can now login to Vault with any of the auth methods bootstrapped.\n\n"
 
-# If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
-if ${PKI_ENGINE};
-then
 
-    printf "\e[0;34mNext, you can choose a demo to run from the list: \e[0m\n\n"
-    printf "1. Dynamic Database Secerts with TLS Auth\n\n"
-    read -p ": " DEMO
+printf "\e[0;34mNext, you can choose a demo to run from the list: \e[0m\n\n"
+printf "1. Dynamic Database Secerts with TLS Auth\n\n"
+read -p ": " DEMO
 
-    printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
-    printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
-    printf "    2. Create Application specific policies\n"
-    printf "    3. Generate a app certificates via the PKI engine\n"
-    printf "    4. Create a Cert(TLS) Auth role, then login with the new cert and get the token\n"
-    printf "    5. Generate a database username and password via the bootstraped mssql enable\n"
-    printf "    6. Authenticate into the MSSQL database with your new creds\n\n"
+case ${DEMO} in
+1)
+    # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
+    if ${PKI_ENGINE};
+    then
+        printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
+        printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
+        printf "    2. Create Application specific policies\n"
+        printf "    3. Generate a app certificates via the PKI engine\n"
+        printf "    4. Create a Cert(TLS) Auth role, then login with the new cert and get the token\n"
+        printf "    5. Generate a database username and password via the bootstraped mssql enable\n"
+        printf "    6. Authenticate into the MSSQL database with your new creds\n\n"
 
-    case ${DEMO} in
-    1)
         # Get app name
         printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
         read APP_NAME
-
         # Setup tf orchestrator 
         orchestrator
-    ;;
-    esac
-else
-    printf "\e[0;34m\nVault setup complete, re-run script at anytime to update config or bootstrap further\e[0m\n"
-fi
+
+        # Create demo db config
+        create_db_connection
+
+        # Ask if they would like to test cert auth
+        dynamic_cert_login
+
+        # Call dynamic database login function
+        dynamic_db_login
+        
+    else
+        printf "\e[0;34m\nPKI engine not bootstrapped - please complete that process before running this demo.\e[0m\n"
+        exit 0
+    fi
+;;
+esac
