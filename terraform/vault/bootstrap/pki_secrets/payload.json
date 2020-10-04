@@ -1,6 +1,6 @@
 {
-  "ttl": "876h",
-  "max_ttl": "876h",
+  "ttl": "12h",
+  "max_ttl": "8760h",
   "allowed_domains": "*",
   "allow_subdomains": true,
   "enforce_hostnames": false,

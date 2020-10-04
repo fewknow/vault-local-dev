@@ -47,14 +47,10 @@ function bootstrap_vault(){
          cd ${DIR} 
          terraform init -backend-config="${PROJECT_ROOT}/terraform/local-backend.config" >/dev/null
          terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
-         if [ ${MODULE} == "pki_secrets" ]
+         if [ ${MODULE} == "cert_auth" ]
          then
-            # Configuring Root and Intermediate CA
-            create_root_ca
-        elif [ ${MODULE} == "cert_auth" ]
-        then
             printf "\e[1;32mCerts: [\n${PROJECT_ROOT}/config/${PROJECT_NAME}.crt\n${PROJECT_ROOT}/config/${PROJECT_NAME}.key\n]\n"
-        fi
+         fi
          cd - >/dev/null 2>&1
         ;;
         n|N|no)
@@ -122,8 +118,34 @@ function demos(){
             # Get app name
             printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
             read APP_NAME
-            # Setup tf orchestrator 
+
+            # Setup tf orchestrator a.k.a master token for provisioning
             orchestrator
+
+            # Change into the app specific configuration directory
+            cd ${PROJECT_ROOT}/config/${APP_NAME}
+            APP_DIR=`pwd`
+        
+            # Generate new certs for the app cert authentication
+            printf "\e[0;34m\nWith Provisioner Token, creating application certs in:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n\n"
+            python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${PROVISIONER_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
+            cd - >/dev/null 2>&1
+        
+            ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
+        
+            printf "\e[0;34m\nPress any key to continue\e[0m"
+            read -n 1 -s -r
+        
+            # Create new role and tie it to our newly gerenated appliction certs 
+            cd ${PROJECT_ROOT}/terraform/orchestrator/tls
+            printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token and newly created application TLS certs.\n\n"
+            sleep 3
+            terraform init >/dev/null
+            terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}"
+            cd - >/dev/null
+        
+            printf "\e[0;34m\nPress any key to continue\e[0m\n"
+            read -n 1 -s -r
 
             # Create demo db config
             create_db_connection
@@ -160,43 +182,23 @@ function local_cert_check() {
             sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
         fi
     else 
-        printf "\n\e[0;34mCert files not found in:\e[0m ${PROJECT_ROOT}/config.\e[0;34m\nPlease add the following for use within the vault/consul cluster:\e[0m localhost.key, localhost.crt\n"
-        printf "\n\e[0;34mInstead, would you like to generate new certs now? \e[0m"
-        read CERTS_BOOL
+        printf "\n\e[0;34mCert files not found in:\e[0m ${PROJECT_ROOT}/config. (localhost.key, localhost.crt)\e[0;34m\nThe are needed for use within the vault/consul cluster\e[0m\n"
+        printf "\n   1. Build Certs\n"
+        printf "\n   2. Add my own certs\n"
+        read CERTS_CHECK
+        
 
-        case $CERTS_BOOL in 
-        y|Y|yes)
+        case $CERTS_CHECK in 
+        1)
             build_local_certs
         ;;
-        n|N|No)
-            printf "\n Exiting, please add certs and restart this script or use the generate certs option...\n\n"
-            exit 0
+        2)
+            printf "\e[0;34m\nOnce certs are in place - Press any key to continue\e[0m"
+            read -n 1 -s -r
+            local_cert_check
         ;;
         esac 
     fi
-}
-
-function create_root_ca(){
-    printf "\n\e[0;34mConfiguring PKI Engine Root and Intermediate CA certs, please wait...\e[0m\n\n"
-    # sleep 5
-    # vault login ${VR_TOKEN} >/dev/null
-    vault write -field=certificate pki_engine/root/generate/internal \
-        common_name="${PROJECT_NAME}.com" \
-        ttl=87600h > ${PROJECT_ROOT}/config/root_ca_cert.crt
-
-    vault write pki_engine/config/urls \
-        issuing_certificates="http://127.0.0.1:8200/v1/pki_engine/ca" \
-        crl_distribution_points="http://127.0.0.1:8200/v1/pki_engine/crl"
-
-    vault write -format=json pki_int/intermediate/generate/internal \
-        common_name="${PROJECT_NAME}.com Intermediate Authority" \
-        | jq -r '.data.csr' > ${PROJECT_ROOT}/config/pki_intermediate.csr
-
-    vault write -format=json pki_engine/root/sign-intermediate csr=@${PROJECT_ROOT}/config/pki_intermediate.csr \
-        format=pem_bundle ttl="43800h" \
-        | jq -r '.data.certificate' > ${PROJECT_ROOT}/config/pki_intermediate.cert.pem
-
-    vault write pki_int/intermediate/set-signed certificate=@${PROJECT_ROOT}/config/pki_intermediate.cert.pem
 }
 
 function create_db_connection(){
@@ -308,32 +310,8 @@ function orchestrator(){
     printf "\e[0;34m\nPress any key to continue\e[0m"
     read -n 1 -s -r
 
-    # Setup AppRoles and Associated tokens
+    # Setup App specific policies and Associated tokens
     app_policies
-
-    cd ${PROJECT_ROOT}/config/${APP_NAME}
-    APP_DIR=`pwd`
-
-    # Generate new certs for the app cert authentication
-    printf "\e[0;34m\nWith Provisioner Token, creating application certs in:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n\n"
-    python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${PROVISIONER_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
-    cd - >/dev/null 2>&1
-
-    ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
-
-    printf "\e[0;34m\nPress any key to continue\e[0m"
-    read -n 1 -s -r
-
-    # Create new role and tie it to our newly gerenated appliction certs 
-    cd ${PROJECT_ROOT}/terraform/orchestrator/tls
-    printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token and newly created application TLS certs.\n\n"
-    sleep 3
-    terraform init >/dev/null
-    terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}"
-    cd - >/dev/null
-
-    printf "\e[0;34m\nPress any key to continue\e[0m\n"
-    read -n 1 -s -r
 }
 
 function reset_local(){
