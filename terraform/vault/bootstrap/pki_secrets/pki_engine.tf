@@ -5,7 +5,7 @@ resource "vault_mount" "pki_engine" {
   max_lease_ttl_seconds     = 87600
   type                      = "pki"
 }
-
+# Configure Root CA CRL
 resource "vault_pki_secret_backend_crl_config" "crl_config" {
   depends_on                = [vault_mount.pki_engine]
   backend                   = vault_mount.pki_engine.path
@@ -13,7 +13,7 @@ resource "vault_pki_secret_backend_crl_config" "crl_config" {
   disable                   = false
 }
 
-# # 1 Create Root Certificate
+# Create Root Certificate
 resource "vault_pki_secret_backend_root_cert" "interal_root_cert" {
   depends_on = [ "vault_mount.pki_engine" ]
   backend = vault_mount.pki_engine.path
@@ -30,7 +30,7 @@ resource "vault_pki_secret_backend_root_cert" "interal_root_cert" {
   organization = var.env
 }
 
-# # 2 config_urls sets up the endpoints for the configuration URLs.
+# config_urls sets up the endpoints for the configuration URLs.
 resource "vault_pki_secret_backend_config_urls" "config_urls" {
   depends_on                = ["vault_pki_secret_backend_crl_config.crl_config"]
   backend                   = vault_mount.pki_engine.path
@@ -38,6 +38,7 @@ resource "vault_pki_secret_backend_config_urls" "config_urls" {
   crl_distribution_points   = ["${var.vault_addr}/v1/${vault_mount.pki_engine.path}/crl"]
 }
 
+# Enable Intermediate CA Mount
 resource "vault_mount" "pki_engine_int" {
   path                      = "pki_int"
   default_lease_ttl_seconds = 3600
@@ -45,6 +46,7 @@ resource "vault_mount" "pki_engine_int" {
   type                      = "pki"
 }
 
+# Configure Int CA CRL
 resource "vault_pki_secret_backend_crl_config" "crl_config_int" {
   depends_on                = [vault_mount.pki_engine_int]
   backend                   = vault_mount.pki_engine_int.path
@@ -52,7 +54,7 @@ resource "vault_pki_secret_backend_crl_config" "crl_config_int" {
   disable                   = false
 }
 
-# # # 3 Create Intermediate Cert CSR
+# Create Intermediate Cert CSR
 resource "vault_pki_secret_backend_intermediate_cert_request" "intermediate" {
   depends_on = [ "vault_mount.pki_engine_int" ]
   backend = "${vault_mount.pki_engine_int.path}"
@@ -60,7 +62,7 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "intermediate" {
   common_name = "${var.env}.com Intermediate Authority"
 }
 
-# # # 4 Sign Intermediate Cert
+# Sign Intermediate Cert
 resource "vault_pki_secret_backend_root_sign_intermediate" "root" {
   depends_on = [ "vault_pki_secret_backend_intermediate_cert_request.intermediate" ]
   backend = "${vault_mount.pki_engine.path}"
@@ -72,23 +74,23 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "root" {
   organization = var.env
 }
 
-# # # 5 Create intermediate cert
+# Create intermediate cert
 resource "vault_pki_secret_backend_intermediate_set_signed" "intermediate" { 
   backend = vault_mount.pki_engine_int.path
   certificate = vault_pki_secret_backend_root_sign_intermediate.root.certificate
 }
 
-# tls-auth-issuer-role creates a Vault role which will have permissions to issue TLS
-# auth certs.
-resource "null_resource" "tls-auth-issuer-role" {
-  depends_on = [vault_pki_secret_backend_crl_config.crl_config_int]
-  provisioner "local-exec" {
-    command = <<EOF
-            curl \
-              --header "X-Vault-Token: ${var.vault_token}" \
-              --request POST \
-              --data @payload.json \
-              ${var.vault_addr}/v1/pki_int/roles/tls-auth-issuer-role
-        EOF
-  }
+# tls-auth-issuer-role creates a Vault role which will have permissions to issue TLS Certs
+resource "vault_pki_secret_backend_role" "role" {
+  backend             = "${vault_mount.pki_engine_int.path}"
+  name                = "tls-auth-issuer-role"
+  ttl                 = "12h"
+  max_ttl             = "8760h"
+  allow_subdomains    = true
+  enforce_hostnames   = false
+  generate_lease      = true
+  require_cn          = false
+  allowed_other_sans  = ["*"] 
+  allow_any_name      = true
+  use_csr_common_name = false
 }

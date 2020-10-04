@@ -19,13 +19,37 @@
 ## Script designed to automate the setup of this entire project. 
 function app_policies(){
     # Function to create policies for apps and databases
-    printf "\e[0;34m\n\nCreating ${APP_NAME} application policies\e[0m\n\n"
+    printf "\e[0;34m\n\nCreating ${APP_NAME} application policies with new token\e[0m\n\n"
     sleep 3
 
     cd ${PROJECT_ROOT}/terraform/apps
     terraform init >/dev/null
     terraform apply -var="token=${PROVISIONER_TOKEN}" -var="app=${APP_NAME}"
     cd - >/dev/null 2>&1
+
+}
+
+function approle_login(){
+    # Change into the appRole bootstrap dir and get the output of the fetch-token created
+    printf "\e[0;34m\n\nGetting AppRole Fetch Token TF State\e[0m\n"
+    cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
+    FETCH_TOKEN=`terraform output -json appRole_fetch_token | tr -d '"'`
+    #echo ${FETCH_TOKEN}
+    cd - >/dev/null
+
+    # With the new fetch token get the role-id and secret-id
+    ROLE_ID=`curl --silent --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/role-id | awk -F'"' '{print $18}'`
+    SECRET_ID=`curl --silent -X POST --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/secret-id | awk -F'"' '{print $18}'`
+    printf "\e[0;34m\nRole-ID:\e[0m ${ROLE_ID}\n" 
+    printf "\e[0;34mRole-ID:\e[0m ${SECRET_ID}\n"
+
+    # Now, renew your fetch token so it can be used when you next deploy
+    RENEWED_FETCH=`curl --silent -X POST --header 'X-Vault-Token: ${FETCH_TOKEN}' https://127.0.0.1:8200/v1/auth/token/renew`
+
+    # Login with your role_id and secret_id
+    APPROLE_TOKEN=`curl --silent -H "Content-Type: application/json" -d "{\"role_id\": \"${ROLE_ID}\",\"secret_id\":\"${SECRET_ID}\"}" -X POST https://127.0.0.1:8200/v1/auth/approle/login | awk -F'{' '{print $3}' | awk -F':' '{print $2}' | awk -F',' '{print $1}' | tr -d '"'`
+    printf "\e[0;34m\n${APP_NAME}-token:\e[0m ${APPROLE_TOKEN}\n"
+
 
 }
 
@@ -93,7 +117,8 @@ function build_local_certs(){
 function demos(){
     printf "\e[0;34mNext, you can choose a demo to run from the list: \e[0m\n\n"
     printf "  1. Dynamic Database Secerts with TLS Auth\n"
-    printf "  2. Exit\n\n"
+    printf "  2. Dynamic Database Secerts with AppRole Auth\n"
+    printf "  3. Exit\n\n"
     read -p ":" DEMO
 
     case ${DEMO} in
@@ -154,14 +179,54 @@ function demos(){
             dynamic_cert_login
 
             # Call dynamic database login function
-            dynamic_db_login
+            dynamic_db_login ${CERT_TOKEN}
 
+        else
+            printf "\e[0;34m\nEither PKI Engine, Cert Auth, or MSSQL not bootstrapped, please restart this script and complete that process.\e[0m\n"
+            exit 0
+        fi
+    ;;
+    2)
+        # Make sure both the pki engine and cert auth methods are configured
+        SET_PKI=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/pki_int/config | grep '200' >/dev/null`
+        SET_CERTS=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/cert/config | grep '200' >/dev/null`
+        SET_DB=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/mssql/config/${APP_NAME} | grep '200' >/dev/null`
+
+        # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
+        if ${SET_PKI} || ${SET_CERTS} || ${SET_DB};
+        then
+            printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
+            printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
+            printf "    2. Create Application specific policies\n"
+            printf "    5. Create a database connection\n"
+            printf "    6. As the app, use fetch token to get appRole role and secret ids, then login to get app token\n"
+            printf "    7. Use your new appRole token to generate database creds\n"
+            printf "    8. Login to the database with your new creds\n\n"
+
+            # Get app name
+            printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
+            read APP_NAME
+
+            # Setup tf orchestrator a.k.a master token for provisioning
+            orchestrator
+        
+            printf "\e[0;34m\nPress any key to continue\e[0m\n"
+            read -n 1 -s -r
+
+            # Create demo db config
+            create_db_connection
+
+            # AppRole Login
+            approle_login
+
+            # Call dynamic database login function
+            dynamic_db_login ${APPROLE_TOKEN}
         else
             printf "\e[0;34m\nEither PKI Engine or Cert Auth not bootstrapped, please restart this script and complete that process.\e[0m\n"
             exit 0
         fi
     ;;
-    2)
+    3)
         exit 0
     ;;
     esac
@@ -208,7 +273,6 @@ function create_db_connection(){
     read DB_PASSWORD
     docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${DB_PASSWORD} -Q "create database ${APP_NAME};"
 
-    #curl --request POST --data @payload.json https://127.0.0.1:8200/v1/auth/approle/login
     # Call demo sql tf module
     printf "\e[0;34m\nCreating App database connection and role\e[0m\n"
     cd ${PROJECT_ROOT}/terraform/demo/dynamic_cert-dynamic_db_creds
@@ -259,11 +323,13 @@ function dynamic_db_login(){
     printf "\e[0;34m\nPress any key to continue\n\e[0m"
     read -n 1 -s -r
 
+    TOKEN=$1
+
     # Get the creds for the sql database
     printf "\e[0;34m\nGenerating dynamic database credentials with our new token.\e[0m\n"
     printf "\e[0;34m\nUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${CERT_TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
 
-    curl --silent --header "X-Vault-Token: ${CERT_TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
+    curl --silent --header "X-Vault-Token: ${TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
 
     DYN_DB_PASS=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $1}' | awk -F: '{print $2}'`
     DYN_DB_USER=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $2}' | awk -F: '{print $2}' | tr -d '}'`

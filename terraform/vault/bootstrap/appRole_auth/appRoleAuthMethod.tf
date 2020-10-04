@@ -8,7 +8,9 @@ resource "vault_approle_auth_backend_role" "role" {
   depends_on            = [vault_auth_backend.approle]
   backend               = "approle"
   role_name             = var.role_name
-  token_policies       = [
+  #secret_id_num_uses    = 
+  secret_id_ttl         = "300" # Five minutes
+  token_policies        = [
     "default",
     "${var.role_name}-policy"
     ]
