@@ -69,7 +69,7 @@ function bootstrap_vault(){
         case $TO_BOOTSTRAP in
         y|Y|yes)
          cd ${DIR} 
-         terraform init -backend-config="${PROJECT_ROOT}/terraform/local-backend.config" >/dev/null
+         terraform init -backend-config="${PROJECT_ROOT}/config/local-backend-config.hcl" >/dev/null
          terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
          if [ ${MODULE} == "cert_auth" ]
          then
@@ -92,8 +92,9 @@ function build_local_certs(){
     printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
 
     # Generate the project certificates
-    cd ${PROJECT_ROOT}/config
+    cd ${PROJECT_ROOT}/config/cluster_certs
     rm -f *.pem *.crt *.key *.csr *.srl
+
     # Genrating CA
     printf "\e[0;34m\n\nGenerating CA Certs\e[0m\n\n"
     openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:4096 -keyout ${PROJECT_NAME}.key -out ${PROJECT_NAME}.pem -subj "/C=US/ST=YourState/L=YourCity/O=${PROJECT_NAME}/CN=localhost.local"
@@ -204,8 +205,12 @@ function demos(){
             printf "    8. Login to the database with your new creds\n\n"
 
             # Get app name
-            printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
-            read APP_NAME
+            printf "\e[0;34m\nGetting app name from the bootstrap entry\e[0m\n"
+            # Change into the appRole bootstrap dir and get the output of the fetch-token created
+            cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
+            APP_NAME=`terraform output -json role_name | tr -d '"'`
+            printf "\e[0;34mUsing Name:\e[0m ${APP_NAME}\n\n"
+            cd - >/dev/null
 
             # Setup tf orchestrator a.k.a master token for provisioning
             orchestrator
@@ -232,25 +237,25 @@ function demos(){
     esac
 }
 
-function local_cert_check() {
+function cluster_cert_check() {
     # Certiicate check
-    if ls ${PROJECT_ROOT}/config/ | grep -q 'localhost.crt' && ls ${PROJECT_ROOT}/config | grep -q 'localhost.key';then
+    if ls ${PROJECT_ROOT}/config/cluster_certs | grep -q 'localhost.crt' && ls ${PROJECT_ROOT}/config/cluster_certs | grep -q 'localhost.key';then
 
         printf "\e[0;34m\nCluster Certs found, using the following files: \e[0m\n\n"
-        ls ${PROJECT_ROOT}/config | grep "localhost.crt\|localhost.key"
+        ls ${PROJECT_ROOT}/config/cluster_certs | grep "localhost.crt\|localhost.key"
 
         # Verify localhost.crt is added to our keychain
-        if security export -k /Library/Keychains/System.keychain -t certs | grep -q `cat ${PROJECT_ROOT}/config/localhost.crt | sed '/^-.*-$/d' | head -n 1`; then
+        if security export -k /Library/Keychains/System.keychain -t certs | grep -q `cat ${PROJECT_ROOT}/config//cluster_certs/localhost.crt | sed '/^-.*-$/d' | head -n 1`; then
             printf "\e[0;34m\nCert found in your local Keychain\e[0m\n\n"
         else
             printf "\e[0;34m\nCert not found in keychain, adding now as 'Always Trusted'\e[0m"
             sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
         fi
     else 
-        printf "\n\e[0;34mCert files not found in:\e[0m ${PROJECT_ROOT}/config. (localhost.key, localhost.crt)\e[0;34m\nThe are needed for use within the vault/consul cluster\e[0m\n"
+        printf "\n\e[0;34mCert files not found in:\e[0m ${PROJECT_ROOT}/config/cluster_certs. (localhost.key, localhost.crt)\e[0;34m\n\nThese are needed for use within the vault/consul cluster\e[0m\n"
         printf "\n   1. Build Certs\n"
         printf "\n   2. Add my own certs\n"
-        read CERTS_CHECK
+        read -p ": " CERTS_CHECK
         
 
         case $CERTS_CHECK in 
@@ -260,7 +265,7 @@ function local_cert_check() {
         2)
             printf "\e[0;34m\nOnce certs are in place - Press any key to continue\e[0m"
             read -n 1 -s -r
-            local_cert_check
+            cluster_cert_check
         ;;
         esac 
     fi
@@ -323,22 +328,23 @@ function dynamic_db_login(){
     printf "\e[0;34m\nPress any key to continue\n\e[0m"
     read -n 1 -s -r
 
+    # Get app token as passed in demo after login. Ex cert auth or approle
     TOKEN=$1
 
     # Get the creds for the sql database
     printf "\e[0;34m\nGenerating dynamic database credentials with our new token.\e[0m\n"
-    printf "\e[0;34m\nUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${CERT_TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
+    printf "\e[0;34m\nUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
 
     curl --silent --header "X-Vault-Token: ${TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
 
-    DYN_DB_PASS=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $1}' | awk -F: '{print $2}'`
-    DYN_DB_USER=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $2}' | awk -F: '{print $2}' | tr -d '}'`
+    DYN_DB_PASS=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $1}' | awk -F: '{print $2}' | tr -d '"'`
+    DYN_DB_USER=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $2}' | awk -F: '{print $2}' | tr -d '}' | tr -d '"'`
     
     printf "\e[0;34m\nDynamic Database Username:\e[0m ${DYN_DB_USER} \n\e[0;34mDynamic Database Password:\e[0m ${DYN_DB_PASS}\n"
     # Login to the sql database and list tables
     printf "\e[0;34m\nTest login into the MSSQL database with the command below:\e[0m\n\n"
     printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
-    #docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U $DYN_DB_USER -P $DYN_DB_PASS -Q 'select name from sys.databases;'
+    docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U $DYN_DB_USER -P $DYN_DB_PASS -Q 'select name from sys.databases;'
 }
 
 function orchestrator(){
@@ -412,7 +418,7 @@ function reset_local(){
 
         # Remove app directories from previous projects
         printf "\e[0;34m\n\nClearing app data, certs and saved tokens\e[0m\n"
-        for directory in $(find ${PROJECT_ROOT}/config -type d -mindepth 1 | sed s@//@/@); do
+        for directory in $(find ${PROJECT_ROOT}/config -type d -mindepth 1 -not -name "cluster_certs" | sed s@//@/@); do
             rm -rf ${directory}
             printf "\e[0;35m.\e[0m"
         done
@@ -439,8 +445,6 @@ function set_backend(){
         else
           rm -f ${directory}/backend.tf
           folder=$(echo ${directory} | awk -F "/" '{print $NF}')
-        #   printf "\e[0;34mEntity:\e[0m ${folder}\n"
-        #   printf "\e[0;34mCreating\e[0m ${directory}/backend.tf\n\n"
           echo "terraform {
                  backend \"consul\" {
                    path = \"vault/${folder}\"
@@ -508,7 +512,7 @@ case ${MAIN_MENU} in
     printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker containers used with this project before attempting to clean previously used config files.\e[0m\n"
     reset_local
 
-    local_cert_check
+    cluster_cert_check
 
     # Check if docker is already running with a vault image
     if ! docker ps 2>/dev/null | grep -q "vault";
