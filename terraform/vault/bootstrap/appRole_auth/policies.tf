@@ -1,7 +1,7 @@
 # Policy to allow vault agent to generate provisioner tokens
 # when updating something in vault.
 
-resource "vault_policy" "apps-policy" {
+resource "vault_policy" "app-prov-policy" {
   name = "approle-provisioner-policy"
 
   policy = <<EOT
@@ -18,6 +18,20 @@ resource "vault_policy" "apps-policy" {
     {
       capabilities = ["update"]
     }
+    EOT
+}
 
+resource "vault_policy" "app-fetch-policy" {
+  name = "approle-fetch-policy"
+
+  policy = <<EOT
+    path "auth/token/create"
+    {
+      capabilities = ["update" , "create", "sudo"]
+    }
+    path "auth/approle/role/${var.role_name}*"
+    {
+      capabilities = ["create", "update", "read"]
+    }
     EOT
 }
