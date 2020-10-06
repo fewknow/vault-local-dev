@@ -54,7 +54,6 @@ function bootstrap_vault(){
         elif [ ${MODULE} == "cert_auth" ]
         then
             printf "\e[1;32mCerts: [\n${PROJECT_ROOT}/config/${PROJECT_NAME}.crt\n${PROJECT_ROOT}/config/${PROJECT_NAME}.key\n]\n"
-
         fi
          cd - >/dev/null 2>&1
         ;;
@@ -95,6 +94,57 @@ function build_local_certs(){
     cd - >/dev/null 2>&1
 }
 
+function demos(){
+    printf "\e[0;34mNext, you can choose a demo to run from the list: \e[0m\n\n"
+    printf "  1. Dynamic Database Secerts with TLS Auth\n"
+    printf "  2. Exit\n\n"
+    read -p ":" DEMO
+
+    case ${DEMO} in
+    1)
+        # Make sure both the pki engine and cert auth methods are configured
+        SET_PKI=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/pki_int/config | grep '200' >/dev/null`
+        SET_CERTS=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/cert/config | grep '200' >/dev/null`
+
+        # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
+        if ${SET_PKI} || ${SET_CERTS};
+        then
+            printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
+            printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
+            printf "    2. Create Application specific policies\n"
+            printf "    3. Generate a app certificates via the PKI engine\n"
+            printf "    4. Create a Cert(TLS) Auth role\n"
+            printf "    5. Generate a database username and password via the bootstraped mssql enable\n"
+            printf "    6. As the app, login with the new TLS certs to generate a token\n"
+            printf "    7. Use your new token to generate database creds\n"
+            printf "    8. Login to the database with your new creds\n\n"
+
+            # Get app name
+            printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
+            read APP_NAME
+            # Setup tf orchestrator 
+            orchestrator
+
+            # Create demo db config
+            create_db_connection
+
+            # Ask if they would like to test cert auth
+            dynamic_cert_login
+
+            # Call dynamic database login function
+            dynamic_db_login
+
+        else
+            printf "\e[0;34m\nEither PKI Engine or Cert Auth not bootstrapped, please restart this script and complete that process.\e[0m\n"
+            exit 0
+        fi
+    ;;
+    2)
+        exit 0
+    ;;
+    esac
+}
+
 function local_cert_check() {
     # Certiicate check
     if ls ${PROJECT_ROOT}/config/ | grep -q 'localhost.crt' && ls ${PROJECT_ROOT}/config | grep -q 'localhost.key';then
@@ -110,8 +160,8 @@ function local_cert_check() {
             sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
         fi
     else 
-        printf "\n\e[0;34mCert files not found in:\e[0m ${PROJECT_ROOT}/config.\e[0;34m Please add the following for use within the vault/consul cluster:\e[0m localhost.key, localhost.crt\n"
-        printf "\e[0;34mInstead, would you like to generate new certs now? \e[0m"
+        printf "\n\e[0;34mCert files not found in:\e[0m ${PROJECT_ROOT}/config.\e[0;34m\nPlease add the following for use within the vault/consul cluster:\e[0m localhost.key, localhost.crt\n"
+        printf "\n\e[0;34mInstead, would you like to generate new certs now? \e[0m"
         read CERTS_BOOL
 
         case $CERTS_BOOL in 
@@ -147,9 +197,6 @@ function create_root_ca(){
         | jq -r '.data.certificate' > ${PROJECT_ROOT}/config/pki_intermediate.cert.pem
 
     vault write pki_int/intermediate/set-signed certificate=@${PROJECT_ROOT}/config/pki_intermediate.cert.pem
-
-    #printf "\n\e[0;34mContinuing Vault bootstrap process...\e[0m\n"
-    PKI_ENGINE=true
 }
 
 function create_db_connection(){
@@ -214,7 +261,7 @@ function dynamic_db_login(){
     printf "\e[0;34m\nGenerating dynamic database credentials with our new token.\e[0m\n"
     printf "\e[0;34m\nUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${CERT_TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
 
-    curl --header "X-Vault-Token: ${CERT_TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
+    curl --silent --header "X-Vault-Token: ${CERT_TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
 
     DYN_DB_PASS=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $1}' | awk -F: '{print $2}'`
     DYN_DB_USER=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $2}' | awk -F: '{print $2}' | tr -d '}'`
@@ -224,28 +271,6 @@ function dynamic_db_login(){
     printf "\e[0;34m\nTest login into the MSSQL database with the command below:\e[0m\n\n"
     printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
     #docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U $DYN_DB_USER -P $DYN_DB_PASS -Q 'select name from sys.databases;'
-
-    # printf "\e[0;34m\nShould we clean-up the demo config? \e[0m"
-    # read CLEAN_DEMO
-
-    # case $CLEAN_DEMO in
-    # y|Y|yes)
-    #     printf "\e[0;34m\nDeleting database with the following command: \e[0m\n"
-    #     printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"${DB_PASSWORD}\" -Q \"drop database \"${APP_NAME}\";\"\n\n"
-
-    #     docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "${DB_PASSWORD}" -Q "drop database ${APP_NAME};"
-
-    #     printf "\e[0;34m\nDeleting app config from:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n"
-    #     rm -rf ${PROJECT_ROOT}/config/${APP_NAME}
-
-    #     printf "\e[0;34m\nScript compelete, re-run at anytime to update the vault config...\e[0m\n\n"
-    # ;;
-    # *)
-    #     printf "\e[0;34m\nScript compelete, re-run at anytime to update the vault config...\e[0m\n\n"
-    #     exit 0
-    # ;;
-    # esac
-    
 }
 
 function orchestrator(){
@@ -277,6 +302,7 @@ function orchestrator(){
 
     # Get the new token and set as the vault root token
     PROVISIONER_TOKEN=`terraform output -json master_provisioner_token | tr -d '"'`
+    #echo "${PROVISIONER_TOKEN}"
     cd - >/dev/null 2>&1
 
     printf "\e[0;34m\nPress any key to continue\e[0m"
@@ -308,15 +334,6 @@ function orchestrator(){
 
     printf "\e[0;34m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
-
-    # Create demo db config
-    create_db_connection
-
-    # Ask if they would like to test cert auth
-    dynamic_cert_login
-    
-    # Call dynamic database login function
-    dynamic_db_login
 }
 
 function reset_local(){
@@ -332,19 +349,16 @@ function reset_local(){
     ;;
     n|N|no)
     ;;
-    *)
-        printf "\n Invalid section, please use the format 'Y|N'\n\n"
-        reset_local
     esac
 
-    printf "\e[0;34m\nShould previously used files be removed before starting this build?\e[0m i.e consul data, apps, orchestrator: "
+    printf "\e[0;34m\nShould all previously used files be removed?\e[0m i.e Vault and Consul data, Terraform backends, and TLS Certs? "
     read RESET_BOOL
 
     # If true, delete all previous terraform configs, states etc.
     case $RESET_BOOL in 
     y|Y|yes)
         # Remove TF Configs
-        printf "\e[0;34m\nClearing apps, Consul, Orchestrator, Vault and Consul data\e[0m\n"
+        printf "\e[0;34m\nRemoving Consul, Orchestrator, Vault and Consul data\e[0m\n"
         rm -rf ${PROJECT_ROOT}/_data
         rm -rf ${PROJECT_ROOT}/localhost.crt ${PROJECT_ROOT}/localhost.key
         for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
@@ -353,33 +367,22 @@ function reset_local(){
         done
 
         # Remove app directories from previous projects
+        printf "\e[0;34m\n\nClearing app data, certs and saved tokens\e[0m\n"
         for directory in $(find ${PROJECT_ROOT}/config -type d -mindepth 1 | sed s@//@/@); do
             rm -rf ${directory}
             printf "\e[0;35m.\e[0m"
         done
 
-        # 
-        # for file in $(find ${PROJECT_ROOT}/config -type f -not -name "*.hcl" | sed s@//@/@); do
-        #     rm -rf ${file}
-        #     printf "\e[0;35m.\e[0m"
-        # done
+        # Clearing Mimir Project Certs
+        printf "\e[0;34m\n\nClearing local cluster and project created certs\e[0m\n"
+        for file in $(find ${PROJECT_ROOT}/config -type f -not -name "*.hcl" | sed s@//@/@); do
+            rm -rf ${file}
+            printf "\e[0;35m.\e[0m"
+        done
+        printf "\n"
         
     ;;
     n|N|No)
-    ;;
-    esac
- 
-   printf "\n\n\e[0;31mWarning: This will remove all cert files in:\e[0m ${PWD}/config\n\n"
-   printf "\e[0;34mGenerate new certs for project:\e[0m ${PROJECT_NAME}? "
-   read CERTS_BOOL
-   
-   # If true, remove all certs found in the project config dir - otherwise, call the method to verify needed certs exist. 
-    case $CERTS_BOOL in 
-    y|Y|yes)
-        build_local_certs
-    ;;
-    n|N|no)
-        local_cert_check
     ;;
     esac
 }
@@ -405,7 +408,7 @@ function set_backend(){
 }
 
 function unseal_vault(){
-    printf "\e[0;34m\nAttempting unseal process now...\n\n\e[0m"
+    printf "\e[0;34m\n\nAttempting unseal process now...\n\n\e[0m"
     for i in $(cat ${KEYS_FILE} | awk "/Unseal Key/ {print \$4}"); do
         UNSEAL_KEY=${i}
         vault operator unseal -address=${VAULT_ADDR} "$UNSEAL_KEY"
@@ -427,14 +430,12 @@ KEYS_FILE="${PROJECT_ROOT}/_data/keys.txt"
 if ! which vault >/dev/null
 then
     printf "\e[0;34m\nVault not installed, please install to continue...\e[0m\n\n"
-    PRE_REQ=false
+    exit 0
 elif ! which terraform >/dev/null
 then
     printf "\e[0;34m\nTerraform not installed, please install to continue...\e[0m\n\n"
-    PRE_REQ=false
+    exit 0
 fi
-
-if ! $PRE_REQ;then exit 0;fi
 
 # Output warnings
 printf "\e[0;32m\n## Vault/Consul ##\e[0m\n\n"
@@ -444,97 +445,119 @@ printf "\e[0;31m\nHint:\e[0m If you've already run this script and just need to 
 printf "\e[0;34mName your project: \e[0m" 
 read PROJECT_NAME
 PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
-
 # Set environment so TF can pickup the var. 
 export TF_VAR_env=${PROJECT_NAME}
 
-# Clean old files and compose projects 
-printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker containers previously used with this project before attempting to clean previously used config files\e[0m\n\n"
-reset_local
 
-# Check if docker is already running with a vault image
-if ! docker ps 2>/dev/null | grep -q "vault";
-then
-    # Start the new project in dettached docker 
-    printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-    cd ${PROJECT_ROOT}
-    docker-compose -f docker-compose.yml up -d  
+printf "\e[0;34m\nWhere would you like to start? \n\n\e[0m"
+printf "   1. Start From The Begining\n"
+printf "   2. Bootstrap\n"
+printf "   3. Demos\n"
+printf "   4. Reset local project\n"
+printf "   5. Exit\n"
+printf "\n:"
+read MAIN_MENU
 
-    # Advise we are waiting for the project to complete the startup process 
-    printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-    until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault" 
-    do
-        # >/dev/null 2>&1
-        printf "\e[0;35m.\e[0m"
-        sleep 3
-    done
+case ${MAIN_MENU} in
+1)
+    # Clean old files and compose projects 
+    printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker containers used with this project before attempting to clean previously used config files.\e[0m\n"
+    reset_local
 
-    # init Vault
-    vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
+    local_cert_check
 
-    # Unseal Vault
-    printf "\e[0;34m\n\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
-    sleep 2
-    unseal_vault
-else
-    if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
-        sleep 2
+    # Check if docker is already running with a vault image
+    if ! docker ps 2>/dev/null | grep -q "vault";
+    then
+        # Start the new project in dettached docker 
+        printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+        cd ${PROJECT_ROOT}
+        docker-compose -f docker-compose.yml up -d  
+
+        # Advise we are waiting for the project to complete the startup process 
+        printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+        until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault" 
+        do
+            # >/dev/null 2>&1
+            printf "\e[0;35m.\e[0m"
+            sleep 3
+        done
+
+        # init Vault
+        printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
+        vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
+
         # Unseal Vault
+        printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
+        printf "\e[0;34m\nPress any key to continue\e[0m"
+        read -n 1 -s -r
         unseal_vault
+    else
+        if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
+            sleep 2
+            # Unseal Vault
+            unseal_vault
+        fi
     fi
-fi
 
-# Get the vault root token and your local ip
-VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
-export VAULT_TOKEN="${VR_TOKEN}"
-#vault login ${VR_TOKEN} >/dev/null
+    # Get the vault root token and your local ip
+    VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
+    export VAULT_TOKEN="${VR_TOKEN}"
+    #vault login ${VR_TOKEN} >/dev/null
 
-# Bootstrap the vault configuration
-printf "\e[0;34mDo you want to bootstap Vault?\e[0m i.e Create example auth methods, secret engines, and policies? "
-read BOOTSTRAP
+    # Bootstrap the vault configuration
+    printf "\e[0;34mDo you want to bootstap Vault?\e[0m i.e Create example auth methods, secret engines, and policies? "
+    read BOOTSTRAP
 
-case $BOOTSTRAP in
-y|Y|yes)
-    # Setup terraform backend
-    printf "\e[0;34m\n\nCreating Terraform backend.tf for all modules - Setting to our consul cluster\e[0m\n"
-    sleep 2
-    set_backend
-    # Start bootstrap process
-    bootstrap_vault
-;;
-*)
-    printf "\e[0;34m\nSkipping Bootstrap\n\n\e[0m"
-;;
-esac
-
-printf "\nBasic Vault setup complete!\n\nYou can now login to Vault with any of the auth methods bootstrapped.\n\n"
-
-# If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
-if ${PKI_ENGINE};
-then
-
-    printf "\e[0;34mNext, you can choose a demo to run from the list: \e[0m\n\n"
-    printf "1. Dynamic Database Secerts with TLS Auth\n\n"
-    read -p ": " DEMO
-
-    printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
-    printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
-    printf "    2. Create Application specific policies\n"
-    printf "    3. Generate a app certificates via the PKI engine\n"
-    printf "    4. Create a Cert(TLS) Auth role, then login with the new cert and get the token\n"
-    printf "    5. Generate a database username and password via the bootstraped mssql enable\n"
-    printf "    6. Authenticate into the MSSQL database with your new creds\n\n"
-
-    case ${DEMO} in
-    1)
-        # Get app name
-        printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
-        read APP_NAME
-
-        # Setup tf orchestrator 
-        orchestrator
+    case $BOOTSTRAP in
+    y|Y|yes)
+        # Setup terraform backend
+        printf "\e[0;34m\n\nCreating Terraform backend.tf for all modules - Setting to our consul cluster\e[0m\n"
+        sleep 2
+        set_backend
+        # Start bootstrap process
+        bootstrap_vault
+    ;;
+    *)
+        printf "\e[0;34m\nSkipping Bootstrap\n\n\e[0m"
     ;;
     esac
-else
-    printf "\e[0;34m\nVault setup complete, re-run script at anytime to update config or bootstrap further\e[0m\n"
-fi
+
+    printf "\nBasic Vault setup complete!\n\nYou can now login to Vault with any of the auth methods bootstrapped.\n\n"
+
+    # Run demo function
+    demos
+;;
+2)
+    if VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`;
+    then
+        # Starting bootstrap
+        bootstrap_vault
+        # Starting Demos
+        demos
+    else
+        printf "\e[0;34m\nRoot token not found in:\e[0m ${PROJECT_ROOT}/_data\n"
+        printf "\e[0;34m\nPlease rerun this script and choose 'Start From The Begining'\n"
+    fi
+;;
+3)
+    if VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`;
+    then
+        # Start Demos
+        demos
+    else
+        printf "\e[0;34m\nRoot token not found in:\e[0m ${PROJECT_ROOT}/_data\n"
+        printf "\e[0;34m\nPlease rerun this script and choose 'Start From The Begining'\n"
+    fi
+;;
+4)
+    reset_local
+;;
+5)
+    exit 0
+;;
+*)
+    printf "\e[0;34m\nInvalid Selection, please try again.\n\n"
+    ${PROJECT_ROOT}/scripts/$(basename $0) && exit
+;;
+esac

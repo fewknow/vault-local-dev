@@ -9,7 +9,7 @@ variable "vault_addr" {
 
 variable "ldap_url" {
   type    = string
-  default = "ldaps://rmtwdc610.qvcdev.qvc.net:636"
+  default = "ldaps://test-ldap.testdomain.domain.net:636"
 }
 
 variable "ldap_userdn" {
