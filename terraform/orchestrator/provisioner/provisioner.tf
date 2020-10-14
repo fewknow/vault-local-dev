@@ -34,7 +34,7 @@ resource "vault_token" "master-provisioner" {
     "ad-provisioner-policy",
     "master-provisioner-policy"
   ]
-  ttl = "5m"
+  ttl = "60m"
   #num_uses     = 1
 }
 
