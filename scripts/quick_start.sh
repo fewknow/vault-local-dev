@@ -92,6 +92,7 @@ function build_local_certs(){
     printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
 
     # Generate the project certificates
+    mkdir -p ${PROJECT_ROOT}/config/cluster_certs >/dev/null 2>&1
     cd ${PROJECT_ROOT}/config/cluster_certs
     rm -f *.pem *.crt *.key *.csr *.srl
 
