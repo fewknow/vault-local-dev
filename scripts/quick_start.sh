@@ -11,12 +11,12 @@
 
 
 ## Add a check for vault and terraform installed locally
-## Add in Pauses requesting use to hit enter to continue in key areas 
+## Add in Pauses requesting use to hit enter to continue in key areas
 ## Delete app folders from /config to ensure no previous certs exist as well as directories are deleted.
 ## Cleanup pki function output from this script
 
 
-## Script designed to automate the setup of this entire project. 
+## Script designed to automate the setup of this entire project.
 function app_policies(){
     # Function to create policies for apps and databases
     printf "\e[0;34m\n\nCreating ${APP_NAME} application policies with new token\e[0m\n\n"
@@ -32,7 +32,7 @@ function app_policies(){
 function approle_login(){
     # Change into the appRole bootstrap dir and get the output of the fetch-token created
     printf "\e[0;34m\n\nGetting AppRole Fetch Token TF State\e[0m\n"
-    cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
+    cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null
     FETCH_TOKEN=`terraform output -json appRole_fetch_token | tr -d '"'`
     #echo ${FETCH_TOKEN}
     cd - >/dev/null
@@ -40,7 +40,7 @@ function approle_login(){
     # With the new fetch token get the role-id and secret-id
     ROLE_ID=`curl --silent --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/role-id | awk -F'"' '{print $18}'`
     SECRET_ID=`curl --silent -X POST --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/secret-id | awk -F'"' '{print $18}'`
-    printf "\e[0;34m\nRole-ID:\e[0m ${ROLE_ID}\n" 
+    printf "\e[0;34m\nRole-ID:\e[0m ${ROLE_ID}\n"
     printf "\e[0;34mRole-ID:\e[0m ${SECRET_ID}\n"
 
     # Now, renew your fetch token so it can be used when you next deploy
@@ -64,11 +64,11 @@ function bootstrap_vault(){
 
         printf "\e[0;34mModule:\e[0m $MODULE\n"
         printf "\e[0;34m\nShould TF bootstrap this module? \e[0m"
-        read TO_BOOTSTRAP   
+        read TO_BOOTSTRAP
 
         case $TO_BOOTSTRAP in
         y|Y|yes)
-         cd ${DIR} 
+         cd ${DIR}
          terraform init -backend-config="${PROJECT_ROOT}/config/local-backend-config.hcl" >/dev/null
          terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
          if [ ${MODULE} == "cert_auth" ]
@@ -78,7 +78,7 @@ function bootstrap_vault(){
          cd - >/dev/null 2>&1
         ;;
         n|N|no)
-        ;;      
+        ;;
         *)
           printf "\e[0;34m\nIncorrect selection, skipping... \e[0m\n\n"
         ;;
@@ -87,8 +87,8 @@ function bootstrap_vault(){
 }
 
 function build_local_certs(){
-    # Get local ip address and add it to our certificate request 
-    IFIP=`ifconfig | awk '/broadcast/{print $2}'`
+    # Get local ip address and add it to our certificate request
+    IFIP=`ifconfig | grep "10\." | awk '{print $2}'`
     printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
 
     # Generate the project certificates
@@ -103,7 +103,7 @@ function build_local_certs(){
 
     printf "\e[0;34m\nSelf-signed Project certs created, these can be assigned to a cert auth role and referenced on login.\e[0m\n\n"
     printf "${PWD}:\n"
-    ls ${PROJECT_ROOT}/config | grep "${PROJECT_NAME}.crt\|${PROJECT_NAME}.key" 
+    ls ${PROJECT_ROOT}/config | grep "${PROJECT_NAME}.crt\|${PROJECT_NAME}.key"
 
     # Generating Vault/Consul certificates
     printf "\e[0;34m\nGenerating Vault/Consul Certs\e[0m\n\n"
@@ -152,25 +152,25 @@ function demos(){
             # Change into the app specific configuration directory
             cd ${PROJECT_ROOT}/config/${APP_NAME}
             APP_DIR=`pwd`
-        
+
             # Generate new certs for the app cert authentication
             printf "\e[0;34m\nWith Provisioner Token, creating application certs in:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n\n"
             python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${PROVISIONER_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
             cd - >/dev/null 2>&1
-        
+
             ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
-        
+
             printf "\e[0;34m\nPress any key to continue\e[0m"
             read -n 1 -s -r
-        
-            # Create new role and tie it to our newly gerenated appliction certs 
+
+            # Create new role and tie it to our newly gerenated appliction certs
             cd ${PROJECT_ROOT}/terraform/orchestrator/tls
             printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token and newly created application TLS certs.\n\n"
             sleep 3
             terraform init >/dev/null
             terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}"
             cd - >/dev/null
-        
+
             printf "\e[0;34m\nPress any key to continue\e[0m\n"
             read -n 1 -s -r
 
@@ -208,14 +208,14 @@ function demos(){
             # Get app name
             printf "\e[0;34m\nGetting app name from the bootstrap entry\e[0m\n"
             # Change into the appRole bootstrap dir and get the output of the fetch-token created
-            cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
+            cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null
             APP_NAME=`terraform output -json role_name | tr -d '"'`
             printf "\e[0;34mUsing Name:\e[0m ${APP_NAME}\n\n"
             cd - >/dev/null
 
             # Setup tf orchestrator a.k.a master token for provisioning
             orchestrator
-        
+
             printf "\e[0;34m\nPress any key to continue\e[0m\n"
             read -n 1 -s -r
 
@@ -252,14 +252,14 @@ function cluster_cert_check() {
             printf "\e[0;34m\nCert not found in keychain, adding now as 'Always Trusted'\e[0m"
             sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
         fi
-    else 
+    else
         printf "\n\e[0;34mCert files not found in:\e[0m ${PROJECT_ROOT}/config/cluster_certs. (localhost.key, localhost.crt)\e[0;34m\n\nThese are needed for use within the vault/consul cluster\e[0m\n"
         printf "\n   1. Build Certs\n"
         printf "\n   2. Add my own certs\n"
         read -p ": " CERTS_CHECK
-        
 
-        case $CERTS_CHECK in 
+
+        case $CERTS_CHECK in
         1)
             build_local_certs
         ;;
@@ -268,12 +268,12 @@ function cluster_cert_check() {
             read -n 1 -s -r
             cluster_cert_check
         ;;
-        esac 
+        esac
     fi
 }
 
 function create_db_connection(){
-    # Create database 
+    # Create database
     printf "\e[0;34m\nCreating demo ${APP_NAME} database...\e[0m\n"
     printf "\e[0;34mPlease enter db password as defined in the docker-compose file in the project root: \e[0m"
     read DB_PASSWORD
@@ -318,9 +318,9 @@ function dynamic_cert_login(){
     printf "\n\nvault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME}\n\n"
     #curl --request POST --cert ${PROJECT_ROOT}/config/${APP_NAME}/cert.crt --key ${PROJECT_ROOT}/config/${APP_NAME}/private.crt --data "{\"name\": \"${APP_NAME}\"}" https://127.0.0.1:8200/v1/auth/cert/login > ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
     vault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME} | tee ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
-    
+
     # Set the new token to a variable
-    printf "\e[0;34m\nSetting the new token as our auth mechanism\e[0m\n\n" 
+    printf "\e[0;34m\nSetting the new token as our auth mechanism\e[0m\n\n"
     CERT_TOKEN=`cat ${PROJECT_ROOT}/config/${APP_NAME}/token.txt | awk '/-----/{getline; print $2}'`
 }
 
@@ -340,7 +340,7 @@ function dynamic_db_login(){
 
     DYN_DB_PASS=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $1}' | awk -F: '{print $2}' | tr -d '"'`
     DYN_DB_USER=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $2}' | awk -F: '{print $2}' | tr -d '}' | tr -d '"'`
-    
+
     printf "\e[0;34m\nDynamic Database Username:\e[0m ${DYN_DB_USER} \n\e[0;34mDynamic Database Password:\e[0m ${DYN_DB_PASS}\n"
     # Login to the sql database and list tables
     printf "\e[0;34m\nTest login into the MSSQL database with the command below:\e[0m\n\n"
@@ -367,7 +367,7 @@ function orchestrator(){
         mkdir ${PROJECT_ROOT}/config/${APP_NAME}
     fi
 
-    # Generate a new token to use for provisioning our application 
+    # Generate a new token to use for provisioning our application
     cd ${PROJECT_ROOT}/terraform/orchestrator/provisioner >/dev/null 2>&1
     printf "\e[0;34m\n\nCreating Provisioner Token to be used when deploying from CI/CD - Using for Application:\e[0m ${APP_NAME}\n\n"
     sleep 3
@@ -390,7 +390,7 @@ function orchestrator(){
 function reset_local(){
     printf "\e[0;34m\nShould this script stop your previous Mimir docker-compose project? \e[0m"
     read STOP_COMPOSE
-    
+
     # If true, stop any docker-compose projects built with this project.
     case $STOP_COMPOSE in
     y|Y|yes)
@@ -406,7 +406,7 @@ function reset_local(){
     read RESET_BOOL
 
     # If true, delete all previous terraform configs, states etc.
-    case $RESET_BOOL in 
+    case $RESET_BOOL in
     y|Y|yes)
         # Remove TF Configs
         printf "\e[0;34m\nRemoving Consul, Orchestrator, Vault and Consul data\e[0m\n"
@@ -431,7 +431,7 @@ function reset_local(){
             printf "\e[0;35m.\e[0m"
         done
         printf "\n"
-        
+
     ;;
     n|N|No)
     ;;
@@ -475,7 +475,7 @@ export VAULT_ADDR=https://127.0.0.1:8200
 PROJECT_ROOT=$(dirname $(cd `dirname $0` && pwd))
 KEYS_FILE="${PROJECT_ROOT}/_data/keys.txt"
 
-# Terraform and Vault CLI check 
+# Terraform and Vault CLI check
 if ! which vault >/dev/null
 then
     printf "\e[0;34m\nVault not installed, please install to continue...\e[0m\n\n"
@@ -491,10 +491,10 @@ printf "\e[0;32m\n## Vault/Consul ##\e[0m\n\n"
 printf "\e[0;31m\nHint:\e[0m If you've already run this script and just need to start compose, run \e[0m\e[0;34m'docker-compose up'\e[0m from the project root.\nYour unseal keys and root token are stored in:\e[0m\e[0;34m ${KEYS_FILE}\e[0m\n\n"
 
 # Get Project Env
-printf "\e[0;34mName your project: \e[0m" 
+printf "\e[0;34mName your project: \e[0m"
 read PROJECT_NAME
 PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
-# Set environment so TF can pickup the var. 
+# Set environment so TF can pickup the var.
 export TF_VAR_env=${PROJECT_NAME}
 
 
@@ -509,7 +509,7 @@ read MAIN_MENU
 
 case ${MAIN_MENU} in
 1)
-    # Clean old files and compose projects 
+    # Clean old files and compose projects
     printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker containers used with this project before attempting to clean previously used config files.\e[0m\n"
     reset_local
 
@@ -518,14 +518,14 @@ case ${MAIN_MENU} in
     # Check if docker is already running with a vault image
     if ! docker ps 2>/dev/null | grep -q "vault";
     then
-        # Start the new project in dettached docker 
+        # Start the new project in dettached docker
         printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
         cd ${PROJECT_ROOT}
-        docker-compose -f docker-compose.yml up -d  
+        docker-compose -f docker-compose.yml up -d
 
-        # Advise we are waiting for the project to complete the startup process 
+        # Advise we are waiting for the project to complete the startup process
         printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-        until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault" 
+        until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
         do
             # >/dev/null 2>&1
             printf "\e[0;35m.\e[0m"
