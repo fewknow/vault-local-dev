@@ -19,7 +19,7 @@
 ## Script designed to automate the setup of this entire project.
 function app_policies(){
     # Function to create policies for apps and databases
-    printf "\e[0;34m\n\nCreating ${APP_NAME} application policies with new token\e[0m\n\n"
+    printf "\e[0;34m\n\nCreating\e[0m ${APP_NAME} \e[0;34mapplication policies with new token\e[0m\n\n"
     sleep 3
 
     cd ${PROJECT_ROOT}/terraform/apps
@@ -101,7 +101,7 @@ function build_local_certs(){
     openssl req -x509 -nodes -new -sha256 -days 1024 -newkey rsa:4096 -keyout ${PROJECT_NAME}.key -out ${PROJECT_NAME}.pem -subj "/C=US/ST=YourState/L=YourCity/O=${PROJECT_NAME}/CN=localhost.local"
     openssl x509 -outform pem -in ${PROJECT_NAME}.pem -out ${PROJECT_NAME}.crt
 
-    printf "\e[0;34m\nSelf-signed Project certs created, these can be assigned to a cert auth role and referenced on login.\e[0m\n\n"
+    printf "\e[0;34m\nSelf-signed Project certs created, these can be assigned to a TLS auth role and referenced on login.\e[0m\n\n"
     printf "${PWD}:\n"
     ls ${PROJECT_ROOT}/config | grep "${PROJECT_NAME}.crt\|${PROJECT_NAME}.key"
 
@@ -132,15 +132,14 @@ function demos(){
         # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
         if ${SET_PKI} || ${SET_CERTS};
         then
-            printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
+            printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\n\e[0m"
             printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
             printf "    2. Create Application specific policies\n"
-            printf "    3. Generate a app certificates via the PKI engine\n"
-            printf "    4. Create a Cert(TLS) Auth role\n"
-            printf "    5. Generate a database username and password via the bootstraped mssql enable\n"
-            printf "    6. As the app, login with the new TLS certs to generate a token\n"
-            printf "    7. Use your new token to generate database creds\n"
-            printf "    8. Login to the database with your new creds\n\n"
+            printf "    3. Generate app TLS Auth certificates via the PKI engine\n"
+            printf "    4. Create TLS Auth role which references the certs from step 3\n"
+            printf "    5. As the app, use your new TLS role and cert to generate your Vault access token\n"
+            printf "    6. Use your new token to generate database creds based on the bootstrapped MSSQL database\n"
+            printf "    7. Login to the database with your new creds\n\n"
 
             # Get app name - first check to see if appRole auth was bootstrapped, then ask if we should use that app name or get new now
             if curl --request LIST --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role | grep -q 200;
@@ -180,18 +179,18 @@ function demos(){
 
             ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
 
-            printf "\e[0;34m\nPress any key to continue\e[0m"
+            printf "\e[0;35m\nPress any key to continue\e[0m\n"
             read -n 1 -s -r
 
             # Create new role and tie it to our newly gerenated appliction certs
             cd ${PROJECT_ROOT}/terraform/orchestrator/tls
-            printf "\e[0;34m\n\nCreating Cert Auth Role with the Master Provisioner Token and newly created application TLS certs.\n\n"
+            printf "\e[0;34m\n\nCreating TLS Auth Role with the Master Provisioner Token and newly created application TLS certs.\n\n"
             sleep 3
             terraform init >/dev/null
             terraform apply -var="app=${APP_NAME}" -var="vault_token=${PROVISIONER_TOKEN}"
             cd - >/dev/null
 
-            printf "\e[0;34m\nPress any key to continue\e[0m\n"
+            printf "\e[0;35m\nPress any key to continue\e[0m\n"
             read -n 1 -s -r
 
             # Create demo db config
@@ -204,7 +203,7 @@ function demos(){
             dynamic_db_login ${CERT_TOKEN}
 
         else
-            printf "\e[0;34m\nEither PKI Engine, Cert Auth, or MSSQL not bootstrapped, please restart this script and complete that process.\e[0m\n"
+            printf "\e[0;34m\nEither PKI Engine, TLS Auth, or MSSQL not bootstrapped, please restart this script and complete that process.\e[0m\n"
             exit 0
         fi
     ;;
@@ -219,10 +218,11 @@ function demos(){
             printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
             printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
             printf "    2. Create Application specific policies\n"
-            printf "    5. Create a database connection\n"
-            printf "    6. As the app, use fetch token to get appRole role and secret ids, then login to get app token\n"
-            printf "    7. Use your new appRole token to generate database creds\n"
-            printf "    8. Login to the database with your new creds\n\n"
+            printf "    3. As the app, use fetch token to get appRole role-id as created during the appRole bootstrap process\n"
+            printf "    4. Generate a secret-ID with your fetch token and role-id\n"
+            printf "    5. Login to Vault with your Role-ID and Secret-ID to generate your app auth token\n"
+            printf "    6. Use your new appRole auth token to generate database creds\n"
+            printf "    7. Login to the database with your new creds\n\n"
 
             # Get app name
             printf "\e[0;34m\nUse appRole name as entered during appRole bootstrap?(y|n) \e[0m"
@@ -245,7 +245,7 @@ function demos(){
             # Setup tf orchestrator a.k.a master token for provisioning
             orchestrator
 
-            printf "\e[0;34m\nPress any key to continue\e[0m\n"
+            printf "\e[0;35m\nPress any key to continue\e[0m\n"
             read -n 1 -s -r
 
             # Create demo db config
@@ -257,7 +257,7 @@ function demos(){
             # Call dynamic database login function
             dynamic_db_login ${APPROLE_TOKEN}
         else
-            printf "\e[0;34m\nEither PKI Engine or Cert Auth not bootstrapped, please restart this script and complete that process.\e[0m\n"
+            printf "\e[0;34m\nEither PKI Engine or TLS Auth not bootstrapped, please restart this script and complete that process.\e[0m\n"
             exit 0
         fi
     ;;
@@ -303,44 +303,22 @@ function cluster_cert_check() {
 
 function verify_db_connection(){
     # Create database
-    # printf "\e[0;34m\nCreating demo ${APP_NAME} database...\e[0m\n"
-    # printf "\e[0;34mPlease enter db password as defined in the docker-compose file in the project root: \e[0m"
-    # read DB_PASSWORD
-
-    #printf "\e[0;34mCreating database for this demo now; However is a production environment this is normally already created by the app or db teams.\e[0m\n"
     cd ${PROJECT_ROOT}/terraform/vault/bootstrap/mssql >/dev/null
     DB_PASSWORD=`terraform show -json | jq ".values.root_module.resources" | awk -F\" '/"password":/ {print $4}'`
     APP_NAME=`terraform show -json | jq ".values.root_module.resources" | awk -F\" '/"db_name":/ {print $4}'`
     docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${DB_PASSWORD} -Q "create database ${APP_NAME};" >/dev/null 2>&1
     cd - >/dev/null
 
-    # Call demo sql tf module
-    # printf "\e[0;34m\nCreating App database connection and role\e[0m\n"
-    # cd ${PROJECT_ROOT}/terraform/demo/dynamic_cert-dynamic_db_creds
-    # terraform init >/dev/null
-
-    # #echo "terraform apply -var=\"app=${APP_NAME}\" -var=\"vault_token=${VR_TOKEN}\" -var=\"sql_pass=${DB_PASSWORD}\" -var=\"sql_user=sa\""
-    # terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}" -var="sql_pass=${DB_PASSWORD}" -var="sql_user=sa"
-    # cd - >/dev/null
-
     # Create a database role with our master provisioner token
     export VAULT_TOKEN=${VR_TOKEN}
 
-    # printf "\e[0;34m\nCreating database role\n\e[0m"
-    # vault write mssql/roles/${APP_NAME}-role \
-    # db_name=${APP_NAME}\
-    # creation_statements="CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';\
-    # CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
-    # GRANT SELECT ON SCHEMA::dbo TO [{{name}}];" \
-    # default_ttl="1h" \
-    # max_ttl="24h" \
-
-    printf "\e[0;34m\nVerifying role has been created\e[0m\n"
+    # Output db role so they can see the specifics
+    printf "\e[0;34m\nVerifying database role has been created\e[0m\n"
     vault read mssql/roles/${APP_NAME}-role
 
     printf "\e[0;34m\n\nApplication auth, policies and role provisioning complete. You can now login with your pki generated certs, then grab your dynamic database password.\e[0m\n"
 
-    printf "\e[0;34m\nPress any key to continue\e[0m"
+    printf "\e[0;35m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
 
 }
@@ -361,7 +339,7 @@ function dynamic_cert_login(){
 
 function dynamic_db_login(){
     # Function to read db creds and  login to the database
-    printf "\e[0;34m\nPress any key to continue\n\e[0m"
+    printf "\e[0;35m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
 
     # Get app token as passed in demo after login. Ex cert auth or approle
@@ -378,7 +356,7 @@ function dynamic_db_login(){
 
     printf "\e[0;34m\nDynamic Database Username:\e[0m ${DYN_DB_USER} \n\e[0;34mDynamic Database Password:\e[0m ${DYN_DB_PASS}\n"
     # Login to the sql database and list tables
-    printf "\e[0;34m\nPress any key to continue\n\e[0m"
+    printf "\e[0;35m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
     printf "\e[0;34m\nTesting login into the MSSQL database with the command below:\e[0m\n\n"
     printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
@@ -417,7 +395,7 @@ function orchestrator(){
     #echo "${PROVISIONER_TOKEN}"
     cd - >/dev/null 2>&1
 
-    printf "\e[0;34m\nPress any key to continue\e[0m"
+    printf "\e[0;35m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
 
     # Setup App specific policies and Associated tokens
@@ -473,6 +451,8 @@ function reset_local(){
     n|N|No)
     ;;
     esac
+
+    printf "\e[0;35mReset Complete...\e[0m\n\n"
 }
 
 function set_backend(){
@@ -527,12 +507,12 @@ fi
 printf "\e[0;32m\n## Vault/Consul ##\e[0m\n\n"
 printf "\e[0;31m\nHint:\e[0m If you've already run this script and just need to start compose, run \e[0m\e[0;34m'docker-compose up'\e[0m from the project root.\nYour unseal keys and root token are stored in:\e[0m\e[0;34m ${KEYS_FILE}\e[0m\n\n"
 
-# Get Project Env
-printf "\e[0;34mName your project: \e[0m"
-read PROJECT_NAME
-PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
-# Set environment so TF can pickup the var.
-export TF_VAR_env=${PROJECT_NAME}
+# # Get Project Env
+# printf "\e[0;34mName your project: \e[0m"
+# read PROJECT_NAME
+# PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
+# # Set environment so TF can pickup the var.
+# export TF_VAR_env=${PROJECT_NAME}
 
 
 printf "\e[0;34m\nWhere would you like to start? \n\n\e[0m"
@@ -547,9 +527,17 @@ read MAIN_MENU
 case ${MAIN_MENU} in
 1)
     # Clean old files and compose projects
-    printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker containers used with this project before attempting to clean previously used config files.\e[0m\n"
+    # printf "\e[0;31m\nPlease note: \e[0m \e[0;34mYou should stop any running docker containers used with this project before attempting to clean previously used config files.\e[0m\n"
     reset_local
 
+    # Get Project Env
+    printf "\e[0;34mName your new project: \e[0m"
+    read PROJECT_NAME
+    PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
+    # Set environment so TF can pickup the var.
+    export TF_VAR_env=${PROJECT_NAME}
+
+    # Verify certs have been created for the local vault service
     cluster_cert_check
 
     # Check if docker is already running with a vault image
@@ -575,7 +563,7 @@ case ${MAIN_MENU} in
 
         # Unseal Vault
         printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
-        printf "\e[0;34m\nPress any key to continue\e[0m"
+        printf "\e[0;35m\nPress any key to continue\e[0m\n"
         read -n 1 -s -r
         unseal_vault
     else
@@ -615,6 +603,11 @@ case ${MAIN_MENU} in
     demos
 ;;
 2)
+    PROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "localhost" | awk -F. '/crt/ {print $1}'`
+    PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
+    export TF_VAR_env=${PROJECT_NAME}
+
+    # Get project name 
     if VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`;
     then
         # Starting bootstrap
@@ -627,6 +620,10 @@ case ${MAIN_MENU} in
     fi
 ;;
 3)
+    ROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "localhost" | awk -F. '/crt/ {print $1}'`
+    PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
+    export TF_VAR_env=${PROJECT_NAME}
+
     if VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`;
     then
         # Start Demos
