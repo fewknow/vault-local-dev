@@ -87,8 +87,8 @@ function bootstrap_vault(){
 }
 
 function build_local_certs(){
-    # Get local ip address and add it to our certificate request
-    IFIP=`ifconfig | grep "10\." | awk '{print $2}'`
+    # Get local docker network ip address and add it to our certificate request 
+    IFIP=`ifconfig en0 | awk '/broadcast/{print $2}'`
     printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
 
     # Generate the project certificates
@@ -143,8 +143,22 @@ function demos(){
             printf "    8. Login to the database with your new creds\n\n"
 
             # Get app name
-            printf "\e[0;34m\nStarting certificate genration: Please enter the app name you wish to use: \e[0m"
-            read APP_NAME
+            printf "\e[0;34m\nUse appRole as entered during appRole bootstrap? \e[0m"
+            read READ_APP_NAME
+
+            case $READ_APP_NAME in
+            y|Y|yes)
+                # Change into the appRole bootstrap dir and get the output of the fetch-token created
+                cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
+                APP_NAME=`terraform output -json role_name | tr -d '"'`
+                printf "\e[0;34mUsing Name:\e[0m ${APP_NAME}\n\n"
+                cd - >/dev/null
+            ;;
+            n|N|no)
+                printf "\e[0;34m\nEnter the app name you would like to use: \e[0m"
+                read APP_NAME
+            ;;
+            esac
 
             # Setup tf orchestrator a.k.a master token for provisioning
             orchestrator
@@ -191,11 +205,10 @@ function demos(){
     2)
         # Make sure both the pki engine and cert auth methods are configured
         SET_PKI=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/pki_int/config | grep '200' >/dev/null`
-        SET_CERTS=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/cert/config | grep '200' >/dev/null`
         SET_DB=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/mssql/config/${APP_NAME} | grep '200' >/dev/null`
 
         # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
-        if ${SET_PKI} || ${SET_CERTS} || ${SET_DB};
+        if ${SET_PKI} || ${SET_DB};
         then
             printf "\e[0;34m\nThis demo can walk you through the dynamic CI/CD Auth process as if you were an application, the process is:\n\e[0m"
             printf "    1. Generate a Provisoner Token with permission to create tokens, roles, and policies\n"
@@ -206,12 +219,22 @@ function demos(){
             printf "    8. Login to the database with your new creds\n\n"
 
             # Get app name
-            printf "\e[0;34m\nGetting app name from the bootstrap entry\e[0m\n"
-            # Change into the appRole bootstrap dir and get the output of the fetch-token created
-            cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null
-            APP_NAME=`terraform output -json role_name | tr -d '"'`
-            printf "\e[0;34mUsing Name:\e[0m ${APP_NAME}\n\n"
-            cd - >/dev/null
+            printf "\e[0;34m\nUse appRole as entered during appRole bootstrap? \e[0m"
+            read READ_APP_NAME
+
+            case $READ_APP_NAME in
+            y|Y|yes)
+                # Change into the appRole bootstrap dir and get the output of the fetch-token created
+                cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
+                APP_NAME=`terraform output -json role_name | tr -d '"'`
+                printf "\e[0;34mUsing Name:\e[0m ${APP_NAME}\n\n"
+                cd - >/dev/null
+            ;;
+            n|N|no)
+                printf "\e[0;34m\nEnter the app name you would like to use: \e[0m"
+                read APP_NAME
+            ;;
+            esac
 
             # Setup tf orchestrator a.k.a master token for provisioning
             orchestrator
@@ -343,7 +366,9 @@ function dynamic_db_login(){
 
     printf "\e[0;34m\nDynamic Database Username:\e[0m ${DYN_DB_USER} \n\e[0;34mDynamic Database Password:\e[0m ${DYN_DB_PASS}\n"
     # Login to the sql database and list tables
-    printf "\e[0;34m\nTest login into the MSSQL database with the command below:\e[0m\n\n"
+    printf "\e[0;34m\nPress any key to continue\n\e[0m"
+    read -n 1 -s -r
+    printf "\e[0;34m\nTesting login into the MSSQL database with the command below:\e[0m\n\n"
     printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
     docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U $DYN_DB_USER -P $DYN_DB_PASS -Q 'select name from sys.databases;'
 }
@@ -359,7 +384,7 @@ function orchestrator(){
     fi
 
     # Make the application config directory
-    if ! ls ${PROJECT_ROOT}/config/${APP_NAME} 2>/dev/null;
+    if ! ls ${PROJECT_ROOT}/config/${APP_NAME} >/dev/null 2>&1;
     then
         mkdir ${PROJECT_ROOT}/config/${APP_NAME}
     else
@@ -504,7 +529,7 @@ printf "   2. Bootstrap\n"
 printf "   3. Demos\n"
 printf "   4. Reset local project\n"
 printf "   5. Exit\n"
-printf "\n:"
+printf "\n: "
 read MAIN_MENU
 
 case ${MAIN_MENU} in

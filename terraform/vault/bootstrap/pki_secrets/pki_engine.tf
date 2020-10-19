@@ -57,7 +57,7 @@ resource "vault_pki_secret_backend_crl_config" "crl_config_int" {
 # Create Intermediate Cert CSR
 resource "vault_pki_secret_backend_intermediate_cert_request" "intermediate" {
   depends_on = [vault_mount.pki_engine_int]
-  backend = "${vault_mount.pki_engine_int.path}"
+  backend = vault_mount.pki_engine_int.path
   type = "internal"
   common_name = "${var.env}.com Intermediate Authority"
 }
@@ -65,7 +65,7 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "intermediate" {
 # Sign Intermediate Cert
 resource "vault_pki_secret_backend_root_sign_intermediate" "root" {
   depends_on = [vault_pki_secret_backend_intermediate_cert_request.intermediate]
-  backend = "${vault_mount.pki_engine.path}"
+  backend = vault_mount.pki_engine.path
   csr = vault_pki_secret_backend_intermediate_cert_request.intermediate.csr
   common_name = "${var.env}.com Intermediate Authority"
   exclude_cn_from_sans = true
