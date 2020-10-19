@@ -41,7 +41,7 @@ function approle_login(){
     ROLE_ID=`curl --silent --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/role-id | awk -F'"' '{print $18}'`
     SECRET_ID=`curl --silent -X POST --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/secret-id | awk -F'"' '{print $18}'`
     printf "\e[0;34m\nRole-ID:\e[0m ${ROLE_ID}\n"
-    printf "\e[0;34mRole-ID:\e[0m ${SECRET_ID}\n"
+    printf "\e[0;34mSECRET-ID:\e[0m ${SECRET_ID}\n"
 
     # Now, renew your fetch token so it can be used when you next deploy
     RENEWED_FETCH=`curl --silent -X POST --header 'X-Vault-Token: ${FETCH_TOKEN}' https://127.0.0.1:8200/v1/auth/token/renew`
@@ -142,23 +142,29 @@ function demos(){
             printf "    7. Use your new token to generate database creds\n"
             printf "    8. Login to the database with your new creds\n\n"
 
-            # Get app name
-            printf "\e[0;34m\nUse appRole as entered during appRole bootstrap? \e[0m"
-            read READ_APP_NAME
+            # Get app name - first check to see if appRole auth was bootstrapped, then ask if we should use that app name or get new now
+            if curl --request LIST --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role | grep -q 200;
+            then
+                printf "\e[0;34m\nLooks like you bootstrapped the AppRole auth method, would you like to use the app name as entered there(y|n)? \e[0m"
+                read READ_APP_NAME
 
-            case $READ_APP_NAME in
-            y|Y|yes)
-                # Change into the appRole bootstrap dir and get the output of the fetch-token created
-                cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
-                APP_NAME=`terraform output -json role_name | tr -d '"'`
-                printf "\e[0;34mUsing Name:\e[0m ${APP_NAME}\n\n"
-                cd - >/dev/null
-            ;;
-            n|N|no)
-                printf "\e[0;34m\nEnter the app name you would like to use: \e[0m"
+                case $READ_APP_NAME in
+                y|Y|yes)
+                    # Change into the appRole bootstrap dir and get the output of the fetch-token created
+                    cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null 
+                    APP_NAME=`terraform output -json role_name | tr -d '"'`
+                    printf "\e[0;34mUsing Name:\e[0m ${APP_NAME}\n"
+                    cd - >/dev/null
+                ;;
+                n|N|no)
+                    printf "\e[0;34m\nEnter the app name you would like to use: \e[0m"
+                    read APP_NAME
+                ;;
+                esac
+            else
+                printf "\e[0;34m\nEnter the app name you would like to use for this demo: \e[0m"
                 read APP_NAME
-            ;;
-            esac
+            fi
 
             # Setup tf orchestrator a.k.a master token for provisioning
             orchestrator
@@ -219,7 +225,7 @@ function demos(){
             printf "    8. Login to the database with your new creds\n\n"
 
             # Get app name
-            printf "\e[0;34m\nUse appRole as entered during appRole bootstrap? \e[0m"
+            printf "\e[0;34m\nUse appRole name as entered during appRole bootstrap?(y|n) \e[0m"
             read READ_APP_NAME
 
             case $READ_APP_NAME in
@@ -376,7 +382,7 @@ function dynamic_db_login(){
 function orchestrator(){
     if ls /Library/Python/2.7/site-packages/ | grep -q "requests"
     then
-        continue
+        break
     else
         # Install Python module 'requests'
         printf "\e[0;34m\nRequests module needed, please enter your sudo password below to complete the pip3 installation\n\e[0m"
