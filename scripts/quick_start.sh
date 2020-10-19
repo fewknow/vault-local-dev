@@ -195,7 +195,7 @@ function demos(){
             read -n 1 -s -r
 
             # Create demo db config
-            create_db_connection
+            verify_db_connection
 
             # Ask if they would like to test cert auth
             dynamic_cert_login
@@ -249,7 +249,7 @@ function demos(){
             read -n 1 -s -r
 
             # Create demo db config
-            create_db_connection
+            verify_db_connection
 
             # AppRole Login
             approle_login
@@ -301,35 +301,41 @@ function cluster_cert_check() {
     fi
 }
 
-function create_db_connection(){
+function verify_db_connection(){
     # Create database
-    printf "\e[0;34m\nCreating demo ${APP_NAME} database...\e[0m\n"
-    printf "\e[0;34mPlease enter db password as defined in the docker-compose file in the project root: \e[0m"
-    read DB_PASSWORD
-    docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${DB_PASSWORD} -Q "create database ${APP_NAME};"
+    # printf "\e[0;34m\nCreating demo ${APP_NAME} database...\e[0m\n"
+    # printf "\e[0;34mPlease enter db password as defined in the docker-compose file in the project root: \e[0m"
+    # read DB_PASSWORD
+
+    #printf "\e[0;34mCreating database for this demo now; However is a production environment this is normally already created by the app or db teams.\e[0m\n"
+    cd ${PROJECT_ROOT}/terraform/vault/bootstrap/mssql >/dev/null
+    DB_PASSWORD=`terraform show -json | jq ".values.root_module.resources" | awk -F\" '/"password":/ {print $4}'`
+    APP_NAME=`terraform show -json | jq ".values.root_module.resources" | awk -F\" '/"db_name":/ {print $4}'`
+    docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${DB_PASSWORD} -Q "create database ${APP_NAME};" >/dev/null 2>&1
+    cd - >/dev/null
 
     # Call demo sql tf module
-    printf "\e[0;34m\nCreating App database connection and role\e[0m\n"
-    cd ${PROJECT_ROOT}/terraform/demo/dynamic_cert-dynamic_db_creds
-    terraform init >/dev/null
+    # printf "\e[0;34m\nCreating App database connection and role\e[0m\n"
+    # cd ${PROJECT_ROOT}/terraform/demo/dynamic_cert-dynamic_db_creds
+    # terraform init >/dev/null
 
-    #echo "terraform apply -var=\"app=${APP_NAME}\" -var=\"vault_token=${VR_TOKEN}\" -var=\"sql_pass=${DB_PASSWORD}\" -var=\"sql_user=sa\""
-    terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}" -var="sql_pass=${DB_PASSWORD}" -var="sql_user=sa"
-    cd - >/dev/null
+    # #echo "terraform apply -var=\"app=${APP_NAME}\" -var=\"vault_token=${VR_TOKEN}\" -var=\"sql_pass=${DB_PASSWORD}\" -var=\"sql_user=sa\""
+    # terraform apply -var="app=${APP_NAME}" -var="vault_token=${VR_TOKEN}" -var="sql_pass=${DB_PASSWORD}" -var="sql_user=sa"
+    # cd - >/dev/null
 
     # Create a database role with our master provisioner token
     export VAULT_TOKEN=${VR_TOKEN}
 
-    printf "\e[0;34m\nCreating database role\n\e[0m"
-    vault write mssql/roles/${APP_NAME}-role \
-    db_name=${APP_NAME}\
-    creation_statements="CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';\
-    CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
-    GRANT SELECT ON SCHEMA::dbo TO [{{name}}];" \
-    default_ttl="1h" \
-    max_ttl="24h" \
+    # printf "\e[0;34m\nCreating database role\n\e[0m"
+    # vault write mssql/roles/${APP_NAME}-role \
+    # db_name=${APP_NAME}\
+    # creation_statements="CREATE LOGIN [{{name}}] WITH PASSWORD = '{{password}}';\
+    # CREATE USER [{{name}}] FOR LOGIN [{{name}}];\
+    # GRANT SELECT ON SCHEMA::dbo TO [{{name}}];" \
+    # default_ttl="1h" \
+    # max_ttl="24h" \
 
-    echo ""
+    printf "\e[0;34m\nVerifying role has been created\e[0m\n"
     vault read mssql/roles/${APP_NAME}-role
 
     printf "\e[0;34m\n\nApplication auth, policies and role provisioning complete. You can now login with your pki generated certs, then grab your dynamic database password.\e[0m\n"
