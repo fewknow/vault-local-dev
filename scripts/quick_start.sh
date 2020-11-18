@@ -31,7 +31,7 @@ function app_policies(){
 
 function approle_login(){
     # Change into the appRole bootstrap dir and get the output of the fetch-token created
-    printf "\e[0;34m\n\nGetting AppRole Fetch Token TF State\e[0m\n"
+    printf "\e[0;34m\n\nUsing Fetch-Token to get role-id and secret-id \e[0m\n"
     cd ${PROJECT_ROOT}/terraform/vault/bootstrap/appRole_auth 2>/dev/null
     FETCH_TOKEN=`terraform output -json appRole_fetch_token | tr -d '"'`
     #echo ${FETCH_TOKEN}
@@ -316,7 +316,7 @@ function verify_db_connection(){
     printf "\e[0;34m\nVerifying database role has been created\e[0m\n"
     vault read mssql/roles/${APP_NAME}-role
 
-    printf "\e[0;34m\n\nApplication auth, policies and role provisioning complete. You can now login with your pki generated certs, then grab your dynamic database password.\e[0m\n"
+    printf "\e[0;34m\n\nApplication auth, policies and role provisioning complete. You can now login with your role, then grab your dynamic database password.\e[0m\n"
 
     printf "\e[0;35m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
@@ -366,7 +366,7 @@ function dynamic_db_login(){
 function orchestrator(){
     if ls /Library/Python/2.7/site-packages/ | grep -q "requests"
     then
-        break
+        continue
     else
         # Install Python module 'requests'
         printf "\e[0;34m\nRequests module needed, please enter your sudo password below to complete the pip3 installation\n\e[0m"
