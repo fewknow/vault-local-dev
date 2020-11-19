@@ -5,7 +5,7 @@ version: "3.6"
 services:
     consul:
         container_name: "consul"
-        image: "consul"
+        image: "hashicorp/consul-enterprise"
         ports:
             - "8500:8500"
             - "8300:8300"
@@ -16,7 +16,7 @@ services:
 
     vault:
         container_name: "vault"
-        image: "vault"
+        image: "hashicorp/vault-enterprise"
         links:
             - consul:consul
         depends_on:
@@ -27,9 +27,10 @@ services:
         volumes:
             - ./config:/config
             - ./vault/venafi:/vault/venafi
+            - ~/.aws:/root
         cap_add:
             - IPC_LOCK
-        command: "server -config=/config/vault.hcl"
+        command: "cp /root/.aws /home/vault/.aws/ && chown -R /home/vault && server -config=/config/ent-vault.hcl"
 
     mssql: # https://hub.docker.com/_/microsoft-mssql-server
         container_name: "mssql"

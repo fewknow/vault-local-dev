@@ -364,10 +364,8 @@ function dynamic_db_login(){
 }
 
 function orchestrator(){
-    if ls /Library/Python/2.7/site-packages/ | grep -q "requests"
+    if ! ls /Library/Python/2.7/site-packages/ | grep -q "requests"
     then
-        continue
-    else
         # Install Python module 'requests'
         printf "\e[0;34m\nRequests module needed, please enter your sudo password below to complete the pip3 installation\n\e[0m"
         sudo easy_install requests==2.22.0
@@ -429,6 +427,7 @@ function reset_local(){
         rm -rf ${PROJECT_ROOT}/localhost.crt ${PROJECT_ROOT}/localhost.key
         for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
             find ${directory}/ -type f \( -name ".terraform" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
+            # find ${directory}/ -mindepth 1 -type d -name ".terraform" -delete
             printf "\e[0;35m.\e[0m"
         done
 
@@ -537,42 +536,116 @@ case ${MAIN_MENU} in
     # Set environment so TF can pickup the var.
     export TF_VAR_env=${PROJECT_NAME}
 
+    printf "\e[0;34m\nWhich type of Vault?\n\e[0m"
+    printf " 1. OSS\n"
+    printf " 2. Enterprise\n"
+    printf "\n: "
+    read VAULT_VERSION
+
     # Verify certs have been created for the local vault service
     cluster_cert_check
 
-    # Check if docker is already running with a vault image
-    if ! docker ps 2>/dev/null | grep -q "vault";
-    then
-        # Start the new project in dettached docker
-        printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-        cd ${PROJECT_ROOT}
-        docker-compose -f docker-compose.yml up -d
+    case ${VAULT_VERSION} in
+    1)
+        # Check if docker is already running with a vault image
+        if ! docker ps 2>/dev/null | grep -q "vault";
+        then
+            # Start the new project in dettached docker
+            printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+            cd ${PROJECT_ROOT}
+            docker-compose -f docker-compose.yml up -d
 
-        # Advise we are waiting for the project to complete the startup process
-        printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-        until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
-        do
-            # >/dev/null 2>&1
-            printf "\e[0;35m.\e[0m"
-            sleep 3
-        done
+            # Advise we are waiting for the project to complete the startup process
+            printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+            until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
+            do
+                # >/dev/null 2>&1
+                printf "\e[0;35m.\e[0m"
+                sleep 3
+            done
 
-        # init Vault
-        printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
-        vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
+            # init Vault
+            printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
+            vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
 
-        # Unseal Vault
-        printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
-        printf "\e[0;35m\nPress any key to continue\e[0m\n"
-        read -n 1 -s -r
-        unseal_vault
-    else
-        if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
-            sleep 2
             # Unseal Vault
+            printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
+            printf "\e[0;35m\nPress any key to continue\e[0m\n"
+            read -n 1 -s -r
             unseal_vault
+        else
+            if [[ $(vault status | awk "/Sealed/ {print \$2}") == 'true' ]];then
+                sleep 2
+                # Unseal Vault
+                unseal_vault
+            fi
         fi
-    fi
+    ;;
+    2)
+        # Check if docker is already running with a vault image
+        if ! docker ps 2>/dev/null | grep -q "vault";
+        then
+            # Create KMS Key
+            printf "\e[0;34m\n\nCreating awsKMS key for auto-unseal\e[0m\n"
+            cd ${PROJECT_ROOT}/terraform/vault/auto-unseal >/dev/null
+            terraform init >/dev/null 2>&1
+            terraform apply -auto-approve -var "creator=${USER}" | awk -F' ' '/kms_id/ {print $3}' | sed 's/\[0m//g' > ${PROJECT_ROOT}/kms_id.txt
+
+            KMS_KEY=`cat ${PROJECT_ROOT}/kms_id.txt | cut -f1`
+cat << EOF > ${PROJECT_ROOT}/config/ent-vault.hcl
+backend "consul" {
+   address = "consul:8500"
+   advertise_addr = "http://consul:8300"
+   scheme = "http"
+}
+
+listener "tcp" {
+    address = "0.0.0.0:8200"
+    tls_cert_file = "/config/cluster_certs/localhost.crt"
+    tls_key_file = "/config/cluster_certs/localhost.key"
+}
+
+# seal "awskms" {
+#   region = "us-west-2"
+#   kms_key_id = "${KMS_KEY}"
+# }
+
+api_addr = "https://localhost:8200"
+disable_mlock = true
+ui=true
+plugin_directory = "vault/venafi"      
+EOF
+
+            #rm -f ${PROJECT_ROOT}/kms_id.txt
+
+            # Start the new project in dettached docker
+            printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+            cd ${PROJECT_ROOT}
+            docker-compose -f ent-docker-compose.yml up -d
+
+            # Advise we are waiting for the project to complete the startup process
+            printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+            until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
+            do
+                # >/dev/null 2>&1
+                printf "\e[0;35m.\e[0m"
+                sleep 3
+            done
+
+            # init Vault
+            printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
+            #vault operator init recovery-key-shares=5 recovery-key-threshold=3 -address=${VAULT_ADDR} > ${KEYS_FILE}
+            vault operator init -address=${VAULT_ADDR} > ${KEYS_FILE}
+
+            # Unseal Vault
+            printf "\e[0;34m\Recovery keys and Root token stored in\e[0m ${KEYS_FILE}\n"
+            printf "\e[0;35m\nPress any key to continue\e[0m\n"
+            read -n 1 -s -r
+        fi
+    ;;
+    esac
+
+
 
     # Get the vault root token and your local ip
     VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
@@ -586,8 +659,7 @@ case ${MAIN_MENU} in
     case $BOOTSTRAP in
     y|Y|yes)
         # Setup terraform backend
-        printf "\e[0;34m\n\nCreating Terraform backend.tf for all modules - Setting to our consul cluster\e[0m\n"
-        sleep 2
+        printf "\e[0;34m\n\nCreating Terraform backend.tf for all modules - Pointing to our consul cluster\e[0m\n"
         set_backend
         # Start bootstrap process
         bootstrap_vault

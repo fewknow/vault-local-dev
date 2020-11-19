@@ -12,7 +12,7 @@ listener "tcp" {
 
 # seal "awskms" {
 #   region = "us-west-2"
-#   kms_key_id = "f09629d2-2f63-432c-a10d-4c29b30b7a0e"
+#   kms_key_id = ""
 # }
 
 api_addr = "https://localhost:8200"
