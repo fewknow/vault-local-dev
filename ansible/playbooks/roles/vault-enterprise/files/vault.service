@@ -1,0 +1,19 @@
+[Unit]
+Description=vault service
+Requires=network-online.target
+After=network-online.target consul.service
+
+[Service]
+User=vault
+Group=vault
+ExecStart=/usr/bin/vault server -config=/etc/vault.d/vault.conf
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=2s
+LimitMEMLOCK=infinity
+LimitNOFILE=8192
+StandardOutput=file:/var/log/vault_init.log
+StandardError=file:/var/log/vault_error.log
+
+[Install]
+WantedBy=multi-user.target

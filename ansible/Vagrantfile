@@ -1,0 +1,128 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box_download_insecure = true
+  config.vm.box = "ubuntu/bionic64"
+
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 2048
+    v.cpus = 2
+  end
+
+  groups = {
+
+     #"local-dev"  => "192.168.99.100",
+     #"consul"    => "192.168.4.22",
+     #"logstash-indexer"    => "192.168.4.44",
+     #"logstash"    => "192.168.4.42",
+     #"rabbitmq"    => "192.168.4.45",
+     #"terraform-tower" => "192.168.4.47",
+     #"mule" => "192.168.4.48",
+     #"concourseci-deploy" => "192.168.4.48",
+     #"teamcity-agent" => "192.168.4.49",
+     #"app-dynamics-java" => "192.168.4.50",
+     #"concourseci-build-java" => "192.168.4.52",
+     #"ec2-docker" => "192.168.4.53",
+     #"concourseci-build-java" => "192.168.4.48",
+     #"fly" => "192.168.4.56"
+     #"datadog-java-client-base"  => "192.168.4.57",z
+     #"vault" => ["192.168.4.51", "192.168.4.52", "192.168.4.53"],
+     "vault-enterprise" => "192.168.4.99",
+     #"concourseci-build-java" => "192.168.4.52",
+     #"ec2-docker" => "192.168.4.53",
+     #"concourseci-build-java" => "192.168.4.48",
+     #"fly" => "192.168.4.56",
+     #"datadog-java-client-base"  => "192.168.4.57",
+     #"mule-cli" => "192.168.4.58",
+     #"nomad" => "192.168.4.59",
+     #"nomad-agent" => "192.168.4.60",
+     #"datadog-rds" => "192.168.4.61",
+     #"jasper" => "192.168.4.62"
+  }
+
+  array_groups = {
+    "vault-enterprise" => ["192.168.4.99", "192.168.4.100", "192.168.4.101"]
+  }
+
+  groups.each_with_index do |(machine_name, machine_ip), index|
+    config.vm.define "#{machine_name}" do |machine|
+      machine.vm.synced_folder "~/.aws", "/root/.aws"
+      #machine.vm.synced_folder "~/.certs", "/etc/ssl/certs/"
+      machine.vm.hostname = "#{machine_name}"
+      machine.vm.network "private_network", ip: "#{machine_ip}"
+
+      machine.vm.network "forwarded_port",guest: 8200, host: 8200
+      # machine.vm.network "forwarded_port",guest: 8500, host: 8500
+      # machine.vm.network "forwarded_port",guest: 5500, host: 5500
+      # machine.vm.network "forwarded_port",guest: 8080, host: 8081
+      # machine.vm.network "forwarded_port",guest: 5600, host: 5600
+      # machine.vm.network "forwarded_port",guest: 15672, host: 15672
+      # machine.vm.network "forwarded_port",guest: 5432, host: 5432
+
+
+      # First, install python
+      config.vm.provision "shell" do |s|
+        s.inline = "apt-get update -y && apt-get install -y python"
+        #s.inline = "keytool -importcert -file /etc/ssl/certs/CASERVER-CA.pem -keystore /usr/lib/jvm/java-8-openjdk-amd64//jre/lib/security/cacerts -trustcacerts -noprompt -storepass changeit -alias fewknow"
+      end
+      # Only execute the Ansible provisioner,
+      # when all the machines are up and ready.
+      provisioner = Vagrant::Util::Platform.windows? ? :guest_ansible : :ansible
+
+      if index == groups.size - 1
+        machine.vm.provision provisioner do |ansible|
+          ansible.playbook       = "playbooks/site.yml"
+          ansible.limit          = "all" # or only "nodes" group, etc.
+          ansible.inventory_path = "inventories/vagrant"
+          ansible.compatibility_mode = "2.0"
+          # ansible.start_at_task = "Install datadog java client"
+          # ansible.verbose = "-vvvv"
+          # ansible.ask_vault_pass = true
+          # ansible.tags = ["test"]
+        end
+      end
+    end
+  end
+end
+
+#   N = 2
+
+#   (0..N).each do |i|
+#   array_groups.each_with_index do |(machine_name, machine_ip), index|
+#     config.vm.define "#{machine_name}-#{i}" do |machine|
+#       machine.vm.synced_folder "~/.aws", "/root/.aws"
+#       #machine.vm.synced_folder "~/.aws", "/home/vault/.aws"
+#       #machine.vm.synced_folder "~/.certs", "/etc/ssl/certs/"
+#       machine.vm.hostname = "#{machine_name}-#{i}"
+#       machine.vm.network "private_network", ip: machine_ip[i]
+
+#       # machine.vm.network "forwarded_port",guest: 8500, host: "850#{i}"
+#       machine.vm.network "forwarded_port",guest: 8200, host: 8200
+
+
+#       # First, install python
+#       config.vm.provision "shell" do |s|
+#         s.inline = "apt-get update -y && apt-get install -y python"
+#         #s.inline = "keytool -importcert -file /etc/ssl/certs/CASERVER-CA.pem -keystore /usr/lib/jvm/java-8-openjdk-amd64//jre/lib/security/cacerts -trustcacerts -noprompt -storepass changeit -alias fewknow"
+#       end
+#       # Only execute the Ansible provisioner,
+#       # when all the machines are up and ready.
+#       provisioner = Vagrant::Util::Platform.windows? ? :guest_ansible : :ansible
+
+#       if index == groups.size - 1
+#         machine.vm.provision provisioner do |ansible|
+#           ansible.playbook       = "playbooks/site.yml"
+#           ansible.limit          = "all" # or only "nodes" group, etc.
+#           ansible.inventory_path = "inventories/vagrant"
+#           ansible.compatibility_mode = "2.0"
+#           # ansible.start_at_task = "Download Vault binary check (sha256)"
+#           # ansible.verbose = "-vvvv"
+#           # ansible.ask_vault_pass = true
+#           # ansible.tags = ["test"]
+#         end
+#       end
+#     end
+#   end
+# end
+# end

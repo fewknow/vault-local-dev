@@ -1,0 +1,7 @@
+---
+
+- name: Copy over bash-install.sh for testing locally
+  copy:
+    src: bash-install.sh
+    dest: /tmp
+    mode: a+x

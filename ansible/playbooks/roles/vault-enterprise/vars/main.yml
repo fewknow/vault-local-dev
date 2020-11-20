@@ -1,0 +1,5 @@
+vault:
+  version: 1.5.5
+  checksum: 145e8608cd2ef0b0ea08d724e3659d251feaddc571caf2c0f190867ed16a8d87
+  deploy_dir: /usr/bin
+  config_dir: /etc/vault.d
