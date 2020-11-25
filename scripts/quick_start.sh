@@ -24,7 +24,7 @@ function app_policies(){
 
     cd ${PROJECT_ROOT}/terraform/apps
     terraform init >/dev/null
-    terraform apply -var="token=${PROVISIONER_TOKEN}" -var="app=${APP_NAME}"
+    terraform apply -var="token=${PROVISIONER_TOKEN}" -var="app=${APP_NAME}" -var="address=${VAULT_ADDRESS}"
     cd - >/dev/null 2>&1
 
 }
@@ -38,16 +38,16 @@ function approle_login(){
     cd - >/dev/null
 
     # With the new fetch token get the role-id and secret-id
-    ROLE_ID=`curl --silent --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/role-id | awk -F'"' '{print $18}'`
-    SECRET_ID=`curl --silent -X POST --header "X-Vault-Token: ${FETCH_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role/${APP_NAME}/secret-id | awk -F'"' '{print $18}'`
+    ROLE_ID=`curl --silent --header "X-Vault-Token: ${FETCH_TOKEN}" ${VAULT_ADDRESS}/v1/auth/approle/role/${APP_NAME}/role-id | awk -F'"' '{print $18}'`
+    SECRET_ID=`curl --silent -X POST --header "X-Vault-Token: ${FETCH_TOKEN}" ${VAULT_ADDRESS}/v1/auth/approle/role/${APP_NAME}/secret-id | awk -F'"' '{print $18}'`
     printf "\e[0;34m\nRole-ID:\e[0m ${ROLE_ID}\n"
     printf "\e[0;34mSECRET-ID:\e[0m ${SECRET_ID}\n"
 
     # Now, renew your fetch token so it can be used when you next deploy
-    RENEWED_FETCH=`curl --silent -X POST --header 'X-Vault-Token: ${FETCH_TOKEN}' https://127.0.0.1:8200/v1/auth/token/renew`
+    RENEWED_FETCH=`curl --silent -X POST --header 'X-Vault-Token: ${FETCH_TOKEN}' ${VAULT_ADDRESS}/v1/auth/token/renew`
 
     # Login with your role_id and secret_id
-    APPROLE_TOKEN=`curl --silent -H "Content-Type: application/json" -d "{\"role_id\": \"${ROLE_ID}\",\"secret_id\":\"${SECRET_ID}\"}" -X POST https://127.0.0.1:8200/v1/auth/approle/login | awk -F'{' '{print $3}' | awk -F':' '{print $2}' | awk -F',' '{print $1}' | tr -d '"'`
+    APPROLE_TOKEN=`curl --silent -H "Content-Type: application/json" -d "{\"role_id\": \"${ROLE_ID}\",\"secret_id\":\"${SECRET_ID}\"}" -X POST ${VAULT_ADDRESS}/v1/auth/approle/login | awk -F'{' '{print $3}' | awk -F':' '{print $2}' | awk -F',' '{print $1}' | tr -d '"'`
     printf "\e[0;34m\n${APP_NAME}-token:\e[0m ${APPROLE_TOKEN}\n"
 
 
@@ -69,8 +69,10 @@ function bootstrap_vault(){
         case $TO_BOOTSTRAP in
         y|Y|yes)
          cd ${DIR}
+         #echo "Token: ${VR_TOKEN}"
          terraform init -backend-config="${PROJECT_ROOT}/config/local-backend-config.hcl" >/dev/null
-         terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDR}" -var="env=${PROJECT_NAME}"
+         echo "terraform apply -var='vault_token=${VR_TOKEN}' -var='vault_addr=${VAULT_ADDRESS}' -var='env=${PROJECT_NAME}'"
+         terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=https://127.0.0.1:8200" -var="env=${PROJECT_NAME}"
          if [ ${MODULE} == "cert_auth" ]
          then
             printf "\e[1;32mCerts: [\n${PROJECT_ROOT}/config/${PROJECT_NAME}.crt\n${PROJECT_ROOT}/config/${PROJECT_NAME}.key\n]\n"
@@ -126,8 +128,8 @@ function demos(){
     case ${DEMO} in
     1)
         # Make sure both the pki engine and cert auth methods are configured
-        SET_PKI=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/pki_int/config | grep '200' >/dev/null`
-        SET_CERTS=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/cert/config | grep '200' >/dev/null`
+        SET_PKI=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/pki_int/config | grep '200' >/dev/null`
+        SET_CERTS=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/cert/config | grep '200' >/dev/null`
 
         # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
         if ${SET_PKI} || ${SET_CERTS};
@@ -142,7 +144,7 @@ function demos(){
             printf "    7. Login to the database with your new creds\n\n"
 
             # Get app name - first check to see if appRole auth was bootstrapped, then ask if we should use that app name or get new now
-            if curl --request LIST --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/auth/approle/role | grep -q 200;
+            if curl --request LIST --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/auth/approle/role | grep -q 200;
             then
                 printf "\e[0;34m\nLooks like you bootstrapped the AppRole auth method, would you like to use the app name as entered there(y|n)? \e[0m"
                 read READ_APP_NAME
@@ -174,7 +176,7 @@ function demos(){
 
             # Generate new certs for the app cert authentication
             printf "\e[0;34m\nWith Provisioner Token, creating application certs in:\e[0m ${PROJECT_ROOT}/config/${APP_NAME}\n\n"
-            python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${PROVISIONER_TOKEN} -U "https://localhost:8200" -C "${APP_NAME}.com" -TTL "1h"
+            python ${PROJECT_ROOT}/terraform/orchestrator/vault_cert_gen.py -T ${PROVISIONER_TOKEN} -U "${VAULT_ADDRESS}" -C "${APP_NAME}.com" -TTL "1h"
             cd - >/dev/null 2>&1
 
             ls -lah ${PROJECT_ROOT}/config/${APP_NAME} | grep '.crt\|.pem' | awk -F' ' '{print $9}'
@@ -209,8 +211,8 @@ function demos(){
     ;;
     2)
         # Make sure both the pki engine and cert auth methods are configured
-        SET_PKI=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/pki_int/config | grep '200' >/dev/null`
-        SET_DB=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" https://127.0.0.1:8200/v1/mssql/config/${APP_NAME} | grep '200' >/dev/null`
+        SET_PKI=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/pki_int/config | grep '200' >/dev/null`
+        SET_DB=`curl --write-out '%{http_code}' --silent --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/mssql/config/${APP_NAME} | grep '200' >/dev/null`
 
         # If the PKI Secret engine was bootstrapped - ask if we should test dynamic cert auth with dynamic secrets
         if ${SET_PKI} || ${SET_DB};
@@ -275,7 +277,7 @@ function cluster_cert_check() {
         ls ${PROJECT_ROOT}/config/cluster_certs | grep "localhost.crt\|localhost.key"
 
         # Verify localhost.crt is added to our keychain
-        if security export -k /Library/Keychains/System.keychain -t certs | grep -q `cat ${PROJECT_ROOT}/config//cluster_certs/localhost.crt | sed '/^-.*-$/d' | head -n 1`; then
+        if security export -k /Library/Keychains/System.keychain -t certs | grep -q `cat ${PROJECT_ROOT}/config/cluster_certs/localhost.crt | sed '/^-.*-$/d' | head -n 1`; then
             printf "\e[0;34m\nCert found in your local Keychain\e[0m\n\n"
         else
             printf "\e[0;34m\nCert not found in keychain, adding now as 'Always Trusted'\e[0m"
@@ -329,7 +331,7 @@ function dynamic_cert_login(){
     # Print to screen the vault command which will be used for cert login - then login
     printf "\e[0;34m\n\nTesting login with your new application cert and role - using the following command:\e[0m\n"
     printf "\n\nvault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME}\n\n"
-    #curl --request POST --cert ${PROJECT_ROOT}/config/${APP_NAME}/cert.crt --key ${PROJECT_ROOT}/config/${APP_NAME}/private.crt --data "{\"name\": \"${APP_NAME}\"}" https://127.0.0.1:8200/v1/auth/cert/login > ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
+    #curl --request POST --cert ${PROJECT_ROOT}/config/${APP_NAME}/cert.crt --key ${PROJECT_ROOT}/config/${APP_NAME}/private.crt --data "{\"name\": \"${APP_NAME}\"}" ${VAULT_ADDRESS}/v1/auth/cert/login > ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
     vault login -method=cert -client-cert=${PROJECT_ROOT}/config/${APP_NAME}/cert.crt -client-key=${PROJECT_ROOT}/config/${APP_NAME}/private.crt name=${APP_NAME} | tee ${PROJECT_ROOT}/config/${APP_NAME}/token.txt
 
     # Set the new token to a variable
@@ -347,9 +349,9 @@ function dynamic_db_login(){
 
     # Get the creds for the sql database
     printf "\e[0;34m\nGenerating dynamic database credentials with our new token.\e[0m\n"
-    printf "\e[0;34m\nUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${TOKEN}' https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role\n\n"
+    printf "\e[0;34m\nUsing the following command:\e[0m\n curl --header 'X-Vault-Token: ${TOKEN}' ${VAULT_ADDRESS}/v1/mssql/creds/${APP_NAME}-role\n\n"
 
-    curl --silent --header "X-Vault-Token: ${TOKEN}" https://127.0.0.1:8200/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
+    curl -k --silent --header "X-Vault-Token: ${TOKEN}" ${VAULT_ADDRESS}/v1/mssql/creds/${APP_NAME}-role > ${PROJECT_ROOT}/config/${APP_NAME}/db_creds
 
     DYN_DB_PASS=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $1}' | awk -F: '{print $2}' | tr -d '"'`
     DYN_DB_USER=`cat ${PROJECT_ROOT}/config/${APP_NAME}/db_creds | awk -F{ '{print $3}' | awk -F, '{print $2}' | awk -F: '{print $2}' | tr -d '}' | tr -d '"'`
@@ -359,7 +361,7 @@ function dynamic_db_login(){
     printf "\e[0;35m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
     printf "\e[0;34m\nTesting login into the MSSQL database with the command below:\e[0m\n\n"
-    printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
+    printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S ${VAULT_ADDRESS} -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
     docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U $DYN_DB_USER -P $DYN_DB_PASS -Q 'select name from sys.databases;'
 }
 
@@ -385,7 +387,7 @@ function orchestrator(){
     printf "\e[0;34m\n\nCreating Provisioner Token to be used when deploying from CI/CD - Using for Application:\e[0m ${APP_NAME}\n\n"
     sleep 3
     terraform init >/dev/null
-    terraform apply -var="vault_token=${VR_TOKEN}"
+    terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=https://127.0.0.1:8200" 
     printf "\e[0;34m\nNote:\e[0m This token is created to ensure 'root' permissions are not given to the pipeline as well as for audit purposes\n\n"
 
     # Get the new token and set as the vault root token
@@ -424,7 +426,7 @@ function reset_local(){
         # Remove TF Configs
         printf "\e[0;34m\nRemoving Consul, Orchestrator, Vault and Consul data\e[0m\n"
         rm -rf ${PROJECT_ROOT}/_data
-        rm -rf ${PROJECT_ROOT}/localhost.crt ${PROJECT_ROOT}/localhost.key
+        rm -rf ${PROJECT_ROOT}/${VAULT_ADDRESS}.crt ${PROJECT_ROOT}/${VAULT_ADDRESS}.key
         for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
             find ${directory}/ -type f \( -name ".terraform" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
             # find ${directory}/ -mindepth 1 -type d -name ".terraform" -delete
@@ -486,8 +488,7 @@ function unseal_vault(){
 ############################
 
 # Set project config
-VAULT_SKIP_VERIFY=true
-export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_SKIP_VERIFY=true
 PROJECT_ROOT=$(dirname $(cd `dirname $0` && pwd))
 KEYS_FILE="${PROJECT_ROOT}/_data/keys.txt"
 
@@ -547,6 +548,9 @@ case ${MAIN_MENU} in
 
     case ${VAULT_VERSION} in
     1)
+        VAULT_ADDRESS="https://127.0.0.1:8200"
+        export VAULT_ADDR=${VAULT_ADDRESS}
+
         # Check if docker is already running with a vault image
         if ! docker ps 2>/dev/null | grep -q "vault";
         then
@@ -566,7 +570,7 @@ case ${MAIN_MENU} in
 
             # init Vault
             printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
-            vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDR} > ${KEYS_FILE}
+            vault operator init -key-shares=3 -key-threshold=2 -address=${VAULT_ADDRESS} > ${KEYS_FILE}
 
             # Unseal Vault
             printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
@@ -580,77 +584,29 @@ case ${MAIN_MENU} in
                 unseal_vault
             fi
         fi
+
+        # Get the vault root token and your local ip
+        VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
+        export VAULT_TOKEN="${VR_TOKEN}"
     ;;
     2)
-        # Check if docker is already running with a vault image
-        if ! docker ps 2>/dev/null | grep -q "vault";
-        then
-            # Create KMS Key
-            printf "\e[0;34m\n\nCreating awsKMS key for auto-unseal\e[0m\n"
-            cd ${PROJECT_ROOT}/terraform/vault/auto-unseal >/dev/null
-            terraform init >/dev/null 2>&1
-            terraform apply -auto-approve -var "creator=${USER}" | awk -F' ' '/kms_id/ {print $3}' | sed 's/\[0m//g' > ${PROJECT_ROOT}/kms_id.txt
-
-            KMS_KEY=`cat ${PROJECT_ROOT}/kms_id.txt | cut -f1`
-cat << EOF > ${PROJECT_ROOT}/config/ent-vault.hcl
-backend "consul" {
-   address = "consul:8500"
-   advertise_addr = "http://consul:8300"
-   scheme = "http"
-}
-
-listener "tcp" {
-    address = "0.0.0.0:8200"
-    tls_cert_file = "/config/cluster_certs/localhost.crt"
-    tls_key_file = "/config/cluster_certs/localhost.key"
-}
-
-# seal "awskms" {
-#   region = "us-west-2"
-#   kms_key_id = "${KMS_KEY}"
-# }
-
-api_addr = "https://localhost:8200"
-disable_mlock = true
-ui=true
-plugin_directory = "vault/venafi"      
-EOF
-
-            #rm -f ${PROJECT_ROOT}/kms_id.txt
-
-            # Start the new project in dettached docker
-            printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-            cd ${PROJECT_ROOT}
-            docker-compose -f ent-docker-compose.yml up -d
-
-            # Advise we are waiting for the project to complete the startup process
-            printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-            until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
-            do
-                # >/dev/null 2>&1
-                printf "\e[0;35m.\e[0m"
-                sleep 3
-            done
-
-            # init Vault
-            printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
-            #vault operator init recovery-key-shares=5 recovery-key-threshold=3 -address=${VAULT_ADDR} > ${KEYS_FILE}
-            vault operator init -address=${VAULT_ADDR} > ${KEYS_FILE}
-
-            # Unseal Vault
-            printf "\e[0;34m\Recovery keys and Root token stored in\e[0m ${KEYS_FILE}\n"
-            printf "\e[0;35m\nPress any key to continue\e[0m\n"
-            read -n 1 -s -r
-        fi
+        VAULT_ADDRESS="https://127.0.0.1:8200"
+        export VAULT_ADDR=${VAULT_ADDRESS}
+        
+        bucket_name="ian-bucket-dev"
+        mkdir -p ${PROJECT_ROOT}/_data
+        aws s3api get-object --bucket ${bucket_name} --key keys.txt ${PROJECT_ROOT}/_data/keys.txt > /dev/null
+        VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | awk -F':' '/TOKEN/ {print $2}' | tr -d '[:space:]'`
+        echo ${VAULT_TOKEN}
+        export VAULT_TOKEN="${VR_TOKEN}"
+        
+        # Start the new project in dettached docker
+        printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+        cd ${PROJECT_ROOT}
+        docker-compose -f ent-docker-compose.yml up -d
+        # Advise we are waiting for the project to complete the startup process
     ;;
     esac
-
-
-
-    # Get the vault root token and your local ip
-    VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
-    export VAULT_TOKEN="${VR_TOKEN}"
-    #vault login ${VR_TOKEN} >/dev/null
 
     # Bootstrap the vault configuration
     printf "\e[0;34mDo you want to bootstap Vault?\e[0m i.e Create example auth methods, secret engines, and policies? "
@@ -675,7 +631,7 @@ EOF
     demos
 ;;
 2)
-    PROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "localhost" | awk -F. '/crt/ {print $1}'`
+    PROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "${VAULT_ADDRESS}" | awk -F. '/crt/ {print $1}'`
     PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
     export TF_VAR_env=${PROJECT_NAME}
 
@@ -692,7 +648,7 @@ EOF
     fi
 ;;
 3)
-    ROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "localhost" | awk -F. '/crt/ {print $1}'`
+    ROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "${VAULT_ADDRESS}" | awk -F. '/crt/ {print $1}'`
     PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
     export TF_VAR_env=${PROJECT_NAME}
 

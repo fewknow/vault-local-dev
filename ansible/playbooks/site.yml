@@ -1,0 +1,4 @@
+---
+#file: site.yml
+- include: vault-enterprise.yml
+

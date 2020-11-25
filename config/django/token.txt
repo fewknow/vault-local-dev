@@ -1,0 +1,18 @@
+Success! You are now authenticated. The token information displayed below
+is already stored in the token helper. You do NOT need to run "vault login"
+again. Future Vault requests will automatically use this token.
+
+Key                            Value
+---                            -----
+token                          s.LJldgHhLb3bmNf0AxzuAKpBW
+token_accessor                 T6ed18xsvhxQo1u17KrNS75B
+token_duration                 5m
+token_renewable                true
+token_policies                 ["default" "django-policy"]
+identity_policies              []
+policies                       ["default" "django-policy"]
+token_meta_cert_name           django
+token_meta_common_name         django.com
+token_meta_serial_number       697659183188433338448551546462941917440671708880
+token_meta_subject_key_id      f3:82:bf:4f:f7:e7:59:fe:62:5a:54:ef:6c:a1:5e:80:9e:8b:f5:e3
+token_meta_authority_key_id    4f:4b:f8:7d:e2:24:17:3c:05:70:cc:35:db:b6:4f:4b:e0:ea:1e:38

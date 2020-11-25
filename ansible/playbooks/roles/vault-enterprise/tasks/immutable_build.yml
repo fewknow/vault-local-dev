@@ -1,0 +1,60 @@
+---
+- name: Download Vault binary check (sha256)
+  get_url:
+    url: https://releases.hashicorp.com/vault/{{ vault.version }}+ent/vault_{{ vault.version }}+ent_linux_amd64.zip
+    dest: /tmp/vault.zip
+    checksum: "sha256:{{ vault.checksum }}"
+
+- name: Create vault group
+  group:
+    name: vault
+    state: present
+
+- name: Create vault user
+  user:
+    name: vault
+    group: vault
+    groups: root
+    comment: User for vault service
+
+- name: Install Vault
+  unarchive:
+    src: /tmp/vault.zip
+    dest: "{{ vault.deploy_dir }}"
+    copy: no
+
+- name: Create Vault configuration directory
+  file:
+    state: directory
+    path: "{{ vault.config_dir }}"
+    owner: vault
+    group: vault
+    mode: 0700
+
+- name: Copy Vault configuration file
+  copy:
+    src: vault.conf.tmp
+    dest: "{{ vault.config_dir }}"
+    owner: vault
+    group: vault
+    mode: 0700
+
+- name: Copy vault service script
+  template:
+    src: "{{ item.source }}"
+    dest: "{{ item.destination }}"
+  with_items:
+    - { source: roles/vault/files/vault.service, destination: /etc/systemd/system }
+
+This should be handled by cloud init file
+- name: Start vault service
+  service:
+    name: vault
+    state: started
+
+- name: Copy over cloud-init.sh for testing locally
+  copy:
+    src: cloud-init.sh
+    dest: /tmp
+    mode: a+x
+  when: vagrant

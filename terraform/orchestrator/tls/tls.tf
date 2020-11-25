@@ -1,6 +1,6 @@
 provider "vault" {
   # This will default to using $VAULT_ADDR
-
+  address = "https://127.0.0.1:8200"
   token = var.vault_token
 }
 

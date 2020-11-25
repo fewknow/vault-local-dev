@@ -1,0 +1,7 @@
+---
+
+- include: bash_install.yml
+  when: bash_install and not immutable_build
+
+- include: immuatbl_build.yml
+  when: immutable_build and not bash_install

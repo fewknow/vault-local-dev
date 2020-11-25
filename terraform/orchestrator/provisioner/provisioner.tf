@@ -1,5 +1,6 @@
 provider "vault" {
   token = var.vault_token
+  address = var.vault_addr
 }
 
 # I WOULD REVISIT THIS LATER TO SEE IF IT MAKES SENSE TO SPLIT UP

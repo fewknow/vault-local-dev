@@ -14,24 +14,6 @@ services:
             - ./_data/consul:/data
         command: "agent -server -data-dir=/data -bind 0.0.0.0 -client 0.0.0.0 -bootstrap-expect=1 -ui"
 
-    vault:
-        container_name: "vault"
-        image: "hashicorp/vault-enterprise"
-        links:
-            - consul:consul
-        depends_on:
-            - consul
-        ports:
-            - "8200:8200"
-            - "22:22"
-        volumes:
-            - ./config:/config
-            - ./vault/venafi:/vault/venafi
-            - ~/.aws:/root
-        cap_add:
-            - IPC_LOCK
-        command: "cp /root/.aws /home/vault/.aws/ && chown -R /home/vault && server -config=/config/ent-vault.hcl"
-
     mssql: # https://hub.docker.com/_/microsoft-mssql-server
         container_name: "mssql"
         image: "mcr.microsoft.com/mssql/server"
@@ -41,19 +23,3 @@ services:
             - MSSQL_PID=Developer
         ports:
             - "1433:1433"
-#
-# ldap:
-#   container_name: openldap
-#   image: mwaeckerlin/openldap
-#   ports:
-#     - '389:389'
-#     - '636:636'
-#   environment:
-#     - DOMAIN=fewknow.com
-#     - ORGANIZATION=FEWKNOW
-#     - PASSWORD=testing123
-# lam:
-#   container_name: lam
-#   image: mwaeckerlin/lam
-#   ports:
-#     - '8080:80'

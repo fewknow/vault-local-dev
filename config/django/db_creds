@@ -1,0 +1,1 @@
+{"errors":["1 error occurred:\n\t* Unable to open tcp connection with host '192.168.192.2:1433': dial tcp 192.168.192.2:1433: i/o timeout\n\n"]}

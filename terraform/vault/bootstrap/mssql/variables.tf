@@ -30,5 +30,5 @@ variable "sql_pass" {
 
 variable "sql_server_ip" {
   description = "Ip for the database"
-  default     = "mssql"
+  #default     = "mssql"
 }
