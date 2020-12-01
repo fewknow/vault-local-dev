@@ -14,12 +14,29 @@ services:
             - ./_data/consul:/data
         command: "agent -server -data-dir=/data -bind 0.0.0.0 -client 0.0.0.0 -bootstrap-expect=1 -ui"
 
-    # mssql: # https://hub.docker.com/_/microsoft-mssql-server
-    #     container_name: "mssql"
-    #     image: "mcr.microsoft.com/mssql/server"
-    #     environment:
-    #         - ACCEPT_EULA=Y
-    #         - SA_PASSWORD=Testing123
-    #         - MSSQL_PID=Developer
-    #     ports:
-    #         - "1433:1433"
+    vault:
+        container_name: "vault"
+        image: "ent-vault:latest"
+        links:
+            - consul:consul
+            - mssql:mssql
+        depends_on:
+            - consul
+        ports:
+            - "8200:8200"
+            - "22:22"
+        volumes:
+            - ~/.aws:/root/.aws
+            - ./config:/config
+        cap_add:
+            - IPC_LOCK
+
+    mssql: # https://hub.docker.com/_/microsoft-mssql-server
+        container_name: "mssql"
+        image: "mcr.microsoft.com/mssql/server"
+        environment:
+            - ACCEPT_EULA=Y
+            - SA_PASSWORD=Testing123
+            - MSSQL_PID=Developer
+        ports:
+            - "1433:1433"

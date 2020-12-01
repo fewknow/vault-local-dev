@@ -1,6 +1,0 @@
----
-    - hosts: vault-enterprise
-      become: true
-      user: ubuntu
-      roles:
-        - { role: vault-enterprise, bash_install: true, immutable_build: false }

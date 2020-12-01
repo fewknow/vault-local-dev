@@ -545,12 +545,11 @@ case ${MAIN_MENU} in
 
     # Verify certs have been created for the local vault service
     cluster_cert_check
+    VAULT_ADDRESS="https://127.0.0.1:8200"
+    export VAULT_ADDR=${VAULT_ADDRESS}
 
     case ${VAULT_VERSION} in
     1)
-        VAULT_ADDRESS="https://127.0.0.1:8200"
-        export VAULT_ADDR=${VAULT_ADDRESS}
-
         # Check if docker is already running with a vault image
         if ! docker ps 2>/dev/null | grep -q "vault";
         then
@@ -589,22 +588,39 @@ case ${MAIN_MENU} in
         VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
         export VAULT_TOKEN="${VR_TOKEN}"
     ;;
-    2)
-        VAULT_ADDRESS="https://127.0.0.1:8200"
-        export VAULT_ADDR=${VAULT_ADDRESS}
-        
-        bucket_name="ian-bucket-dev"
-        mkdir -p ${PROJECT_ROOT}/_data
-        aws s3api get-object --bucket ${bucket_name} --key keys.txt ${PROJECT_ROOT}/_data/keys.txt > /dev/null
-        VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | awk -F':' '/TOKEN/ {print $2}' | tr -d '[:space:]'`
-        echo ${VAULT_TOKEN}
+    2)        
+        # Check if docker is already running with a vault image
+        if ! docker ps 2>/dev/null | grep -q "vault";
+        then
+            # Start the new project in dettached docker
+            printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+            cd ${PROJECT_ROOT}
+            docker-compose -f ent-docker-compose.yml up -d
+
+            # Advise we are waiting for the project to complete the startup process
+            printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+            until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
+            do
+                # >/dev/null 2>&1
+                printf "\e[0;35m.\e[0m"
+                sleep 3
+            done
+
+            # init Vault
+            printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
+            vault operator init -address=${VAULT_ADDRESS} > ${KEYS_FILE}
+
+            # Unseal Vault
+            printf "\e[0;34m\nUnseal keys and token stored in\e[0m ${KEYS_FILE}\n"
+            printf "\e[0;35m\nPress any key to continue\e[0m\n"
+            read -n 1 -s -r
+        else
+            printf "\e[0;34m\nDocker already started with vault service, continuing\n\e[0m"
+        fi
+
+        # Get the vault root token and your local ip
+        VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
         export VAULT_TOKEN="${VR_TOKEN}"
-        
-        # Start the new project in dettached docker
-        printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-        cd ${PROJECT_ROOT}
-        docker-compose -f ent-docker-compose.yml up -d
-        # Advise we are waiting for the project to complete the startup process
     ;;
     esac
 
@@ -631,8 +647,7 @@ case ${MAIN_MENU} in
     demos
 ;;
 2)
-    PROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "${VAULT_ADDRESS}" | awk -F. '/crt/ {print $1}'`
-    PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
+    PROJECT_NAME=$(ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "${VAULT_ADDRESS}" | awk -F. '/crt/ {print $1}' | awk '{print tolower($0)}')
     export TF_VAR_env=${PROJECT_NAME}
 
     # Get project name 
