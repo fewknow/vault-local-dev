@@ -5,7 +5,7 @@ version: "3.6"
 services:
     consul:
         container_name: "consul"
-        image: "hashicorp/consul-enterprise"
+        image: "consul"
         ports:
             - "8500:8500"
             - "8300:8300"

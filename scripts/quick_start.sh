@@ -59,7 +59,7 @@ function bootstrap_vault(){
     printf "\e[0;34m\n\nStarting Bootstrap\n\n"
 
     for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@ | sort); do
-        printf "\e[0;34m\nPATH:\e[0m $DIR\n"
+        printf "\e[0;34m\ne[0m $DIR\n"
         MODULE="$(basename $(dirname ${DIR}/backend.tf))"
 
         printf "\e[0;34mModule:\e[0m $MODULE\n"
@@ -71,8 +71,8 @@ function bootstrap_vault(){
          cd ${DIR}
          #echo "Token: ${VR_TOKEN}"
          terraform init -backend-config="${PROJECT_ROOT}/config/local-backend-config.hcl" >/dev/null
-         echo "terraform apply -var='vault_token=${VR_TOKEN}' -var='vault_addr=${VAULT_ADDRESS}' -var='env=${PROJECT_NAME}'"
-         terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=https://127.0.0.1:8200" -var="env=${PROJECT_NAME}"
+         #echo "terraform apply -var='vault_token=${VR_TOKEN}' -var='vault_addr=${VAULT_ADDRESS}' -var='env=${PROJECT_NAME}'"
+         terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDRESS}" -var="env=${PROJECT_NAME}"
          if [ ${MODULE} == "cert_auth" ]
          then
             printf "\e[1;32mCerts: [\n${PROJECT_ROOT}/config/${PROJECT_NAME}.crt\n${PROJECT_ROOT}/config/${PROJECT_NAME}.key\n]\n"
@@ -82,7 +82,7 @@ function bootstrap_vault(){
         n|N|no)
         ;;
         *)
-          printf "\e[0;34m\nIncorrect selection, skipping... \e[0m\n\n"
+          printf "\e[0;34m\nIPATH:\ncorrect selection, skipping... \e[0m\n\n"
         ;;
         esac
     done
@@ -91,7 +91,7 @@ function bootstrap_vault(){
 function build_local_certs(){
     # Get local docker network ip address and add it to our certificate request 
     IFIP=`ifconfig en0 | awk '/broadcast/{print $2}'`
-    printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
+    printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nDNS.2 = vault.dou.com\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
 
     # Generate the project certificates
     mkdir -p ${PROJECT_ROOT}/config/cluster_certs >/dev/null 2>&1
@@ -361,7 +361,7 @@ function dynamic_db_login(){
     printf "\e[0;35m\nPress any key to continue\e[0m\n"
     read -n 1 -s -r
     printf "\e[0;34m\nTesting login into the MSSQL database with the command below:\e[0m\n\n"
-    printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S ${VAULT_ADDRESS} -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
+    printf "docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U ${DYN_DB_USER} -P ${DYN_DB_PASS} -Q 'select name from sys.databases;'\n\n"
     docker exec -it mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U $DYN_DB_USER -P $DYN_DB_PASS -Q 'select name from sys.databases;'
 }
 
@@ -387,7 +387,7 @@ function orchestrator(){
     printf "\e[0;34m\n\nCreating Provisioner Token to be used when deploying from CI/CD - Using for Application:\e[0m ${APP_NAME}\n\n"
     sleep 3
     terraform init >/dev/null
-    terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=https://127.0.0.1:8200" 
+    terraform apply -var="vault_token=${VR_TOKEN}" -var="vault_addr=${VAULT_ADDRESS}" 
     printf "\e[0;34m\nNote:\e[0m This token is created to ensure 'root' permissions are not given to the pipeline as well as for audit purposes\n\n"
 
     # Get the new token and set as the vault root token
@@ -560,7 +560,7 @@ case ${MAIN_MENU} in
 
             # Advise we are waiting for the project to complete the startup process
             printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-            until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
+            until curl ${VAULT_ADDRESS}/v1/status 2>/dev/null | grep -q "Vault"
             do
                 # >/dev/null 2>&1
                 printf "\e[0;35m.\e[0m"
@@ -588,18 +588,33 @@ case ${MAIN_MENU} in
         VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
         export VAULT_TOKEN="${VR_TOKEN}"
     ;;
-    2)        
+    2)
+        BUCKET_NAME="ian-bucket-dev"
+        LICENSE_FILE="license.txt"
+
         # Check if docker is already running with a vault image
-        if ! docker ps 2>/dev/null | grep -q "vault";
-        then
-            # Start the new project in dettached docker
-            printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
-            cd ${PROJECT_ROOT}
-            docker-compose -f ent-docker-compose.yml up -d
+        if ! docker ps 2>/dev/null | grep -q "vault"; then
+
+            # Check if Vault Enterprise image exists on host and is specified in the ent-docker-compose.yml file 
+            if ! docker image ls | grep -q 'ent-vault' && cat ${PROJECT_ROOT}/ent-docker-compose.yml | grep -q '        image: "ent-vault:latest"'; then
+                printf "\e[0;34m\nDocker Vault Enterprise image not found on system - creating now:\n\n\e[0m"
+                cd ${PROJECT_ROOT}
+                docker build -t ent-vault .
+
+                # Start the new project in detached docker
+                printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+                cd ${PROJECT_ROOT}
+                docker-compose -f ent-docker-compose.yml up -d 
+            else
+                # Start the new project in detached docker
+                printf "\e[0;34m\nStarting ${PROJECT_NAME} docker-compose project detached\e[0m\n\n"
+                cd ${PROJECT_ROOT}
+                docker-compose -f ent-docker-compose.yml up -d
+            fi
 
             # Advise we are waiting for the project to complete the startup process
-            printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
-            until curl https://localhost:8200/v1/status 2>/dev/null | grep -q "Vault"
+            printf "\e[0;34m\nWaiting for Vault to complete initial startup\e[0m\n"
+            until curl ${VAULT_ADDRESS}/v1/status 2>/dev/null | grep -q "Vault"
             do
                 # >/dev/null 2>&1
                 printf "\e[0;35m.\e[0m"
@@ -607,7 +622,7 @@ case ${MAIN_MENU} in
             done
 
             # init Vault
-            printf "\e[0;34m\n\nStarting Vault Init\n\e[0m"
+            printf "\e[0;34m\n\nStarting Vault Operator Init\n\e[0m"
             vault operator init -address=${VAULT_ADDRESS} > ${KEYS_FILE}
 
             # Unseal Vault
@@ -621,6 +636,26 @@ case ${MAIN_MENU} in
         # Get the vault root token and your local ip
         VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
         export VAULT_TOKEN="${VR_TOKEN}"
+
+        #if curl -s --header "X-Vault-Token: ${TOKEN}" ${VAULT_ADDRESS}/v1/sys/license | grep -i 
+
+        printf "\e[0;34mDownloading License from S3\n\e[0m"
+        aws s3api get-object --bucket ${BUCKET_NAME} --key ${LICENSE_FILE} license.txt >/dev/null
+        LICENSE=`cat license.txt`
+        cat << EOF > license.txt
+{
+    "text": "${LICENSE}"
+}
+EOF
+
+        printf "\e[0;34mInstalling license\n\e[0m"
+        curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license
+
+        sleep 5
+
+        printf "\e[0;34mCheck license is now non-temporary\n\e[0m"
+        curl -s --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/sys/license | jq '.data'
+        rm -f license.txt
     ;;
     esac
 
@@ -647,7 +682,7 @@ case ${MAIN_MENU} in
     demos
 ;;
 2)
-    PROJECT_NAME=$(ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "${VAULT_ADDRESS}" | awk -F. '/crt/ {print $1}' | awk '{print tolower($0)}')
+    PROJECT_NAME=$()
     export TF_VAR_env=${PROJECT_NAME}
 
     # Get project name 
@@ -663,8 +698,7 @@ case ${MAIN_MENU} in
     fi
 ;;
 3)
-    ROJECT_NAME=`ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "${VAULT_ADDRESS}" | awk -F. '/crt/ {print $1}'`
-    PROJECT_NAME=$(echo $PROJECT_NAME | awk '{print tolower($0)}')
+    PROJECT_NAME=$(ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v "${VAULT_ADDRESS}" | awk -F. '/crt/ {print $1}' | awk '{print tolower($0)}' | awk '{print tolower($0)}')
     export TF_VAR_env=${PROJECT_NAME}
 
     if VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`;
