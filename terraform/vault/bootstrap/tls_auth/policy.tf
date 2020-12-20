@@ -21,20 +21,20 @@ resource "vault_policy" "tls-auth-certificate-issuer-policy" {
 }
 
 
-# tls-auth-issuer-role-policy is a provisioner policy
-resource "vault_policy" "tls-auth-issuer-role-policy" {
-  name   = "tls-auth-issuer-role-policy"
-  policy = <<EOT
-  #Allow token to manage itself
-  path "auth/token/create" {
-    capabilities = [ "update" ]
-  }
-  # Work with tls-auth secrets engine
-  path "pki_int/issue/tls-auth-issuer-role" {
-    capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
-  }
-  EOT
-}
+# # tls-auth-issuer-role-policy is a provisioner policy
+# resource "vault_policy" "tls-auth-issuer-role-policy" {
+#   name   = "tls-auth-issuer-role-policy"
+#   policy = <<EOT
+#   #Allow token to manage itself
+#   path "auth/token/create" {
+#     capabilities = [ "update" ]
+#   }
+#   # Work with tls-auth secrets engine
+#   path "pki_int/issue/tls-auth-issuer-role" {
+#     capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
+#   }
+#   EOT
+# }
 
 # Create Policy 
 resource "vault_policy" "admin-cert-policy" {

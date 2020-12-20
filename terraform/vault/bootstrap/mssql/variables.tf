@@ -26,6 +26,7 @@ variable "sql_user" {
 
 variable "sql_pass" {
   description = "Database password"
+  default = "Testing123"
 }
 
 variable "sql_server_ip" {

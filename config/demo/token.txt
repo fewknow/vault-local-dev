@@ -1,0 +1,18 @@
+Success! You are now authenticated. The token information displayed below
+is already stored in the token helper. You do NOT need to run "vault login"
+again. Future Vault requests will automatically use this token.
+
+Key                            Value
+---                            -----
+token                          s.4JYAiNrj3bSJNjxVUTKfDH0r
+token_accessor                 tGUnDQumpsBzb9qQ4StNZKpf
+token_duration                 5m
+token_renewable                true
+token_policies                 ["default" "demo-policy"]
+identity_policies              []
+policies                       ["default" "demo-policy"]
+token_meta_authority_key_id    78:d7:66:f1:68:5d:4f:aa:a1:7e:e6:f4:50:99:86:ff:4c:74:6e:84
+token_meta_cert_name           demo
+token_meta_common_name         demo.com
+token_meta_serial_number       411364958538856957324536176008901964171748133072
+token_meta_subject_key_id      52:8b:36:7d:cf:0d:5f:10:e1:9b:61:13:b8:e4:66:63:c9:d3:83:40

@@ -63,7 +63,6 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "intermediate" {
 }
 
 #resource "null_resource" "previous" {}
-
 resource "time_sleep" "wait_10_seconds" {
   depends_on = [vault_pki_secret_backend_intermediate_cert_request.intermediate]
 
