@@ -1,4 +1,4 @@
-output "path" {
+output "cert_path" {
   value = vault_auth_backend.cert.path
 }
 
