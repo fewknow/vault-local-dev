@@ -8,7 +8,7 @@ RUN dnf -y install epel-release && dnf -y update
 RUN dnf -y install curl jq unzip vim awscli
 
 # Make project directories 
-RUN mkdir -p /etc/vault.d/ \
+RUN mkdir -p /etc/vault.d/data \
 && mkdir -p /etc/certs
 
 # Copy over the vault config file 

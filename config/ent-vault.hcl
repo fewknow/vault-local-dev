@@ -2,11 +2,11 @@ disable_performance_standby = true
 disable_mlock = true
 ui = true
 api_addr = "https://localhost:8200"
+cluster_addr = "http://localhost:8200"
 
-backend "consul" {
-   address = "consul:8500"
-   advertise_addr = "http://consul:8300"
-   scheme = "http"
+storage "raft" {
+  path = "/etc/vault.d/data"
+  node_id = "raft_node_1"
 }
 
 listener "tcp" {

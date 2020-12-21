@@ -604,7 +604,6 @@ case ${MAIN_MENU} in
 
         # Check if docker is already running with a vault image
         if ! docker ps 2>/dev/null | grep -q "vault"; then
-
             # Check if Vault Enterprise image exists on host and is specified in the ent-docker-compose.yml file 
             if ! docker image ls | grep -q 'ent-vault' && cat ${PROJECT_ROOT}/ent-docker-compose.yml | grep -q '        image: "ent-vault:latest"'; then
                 printf "\e[0;34m\nDocker Vault Enterprise image not found on system - creating now:\n\n\e[0m"
@@ -631,6 +630,8 @@ case ${MAIN_MENU} in
                 sleep 3
             done
 
+            mkdir -p ${PROJECT_ROOT}/_data 
+            
             # init Vault
             printf "\e[0;34m\n\nStarting Vault Operator Init\n\e[0m"
             vault operator init -address=${VAULT_ADDRESS} > ${KEYS_FILE}
@@ -659,9 +660,11 @@ case ${MAIN_MENU} in
 EOF
 
         printf "\e[0;34mInstalling license\n\e[0m"
-        curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license
-
-        sleep 5
+        until curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1;
+        do
+            printf "\e[0;35m.\e[0m"
+            sleep 3
+        done
 
         printf "\e[0;34mCheck license is now non-temporary\n\e[0m"
         curl -s --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/sys/license | jq '.data'
