@@ -67,6 +67,16 @@ function build_local_certs(){
     printf "\e[0;34m\nAdding new self-signed localhost cert to keychain and setting as 'Always Trust - If prompted, please enter your 'sudo' password below.\e[0m\n\n'"
     sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
     cd - >/dev/null 2>&1
+
+    # Add alias for vault.dou.com if it doesn't exist
+    if ! grep -q "vault.dou.com" /etc/hosts;
+    then
+        printf "\e[0;34m\nAdding alias\e[0m 'vault.dou.com'\e[0;34m to /etc/hosts - If prompted, please enter your 'sudo' password below.\e[0m\n\n"
+        sudo su - <<EOF
+        echo  "# Added by vault-local-dev project" >> /etc/hosts
+        echo  "127.0.0.1 vault.dou.com" >> /etc/hosts
+EOF
+    fi
 }
 
 # Check certs exist so the local Vault/Consul cluster will start 
@@ -669,7 +679,7 @@ case ${MAIN_MENU} in
 EOF
 
         printf "\e[0;34mInstalling license\n\e[0m"
-        curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license
+        curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1
 
         sleep 5
 
