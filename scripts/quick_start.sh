@@ -625,6 +625,18 @@ case ${MAIN_MENU} in
         # Check if docker is already running with a vault image
         if ! docker ps 2>/dev/null | grep -q "vault"; then
 
+            if ! which aws >/dev/null 2>&1
+            then
+                printf "\e[0;34m\nAWS CLI is not installed, this is needed for access to KMS and S3 for the license - please install to continue...\e[0m\n\n"
+                exit 0
+            fi
+
+            if ! aws s3api list-buckets > /dev/null 2>&1;
+            then
+                printf "\e[0;34m\nAWS Access not configured, please run `aws configure` to continue.\e[0m\n\n"
+                exit 0
+            fi
+
             # Check if Vault Enterprise image exists on host and is specified in the ent-docker-compose.yml file 
             if ! docker image ls | grep -q 'ent-vault' && cat ${PROJECT_ROOT}/ent-docker-compose.yml | grep -q '        image: "ent-vault:latest"'; then
                 printf "\e[0;34m\nDocker Vault Enterprise image not found on system - creating now:\n\n\e[0m"
@@ -680,12 +692,18 @@ EOF
 
         printf "\e[0;34mInstalling license\n\e[0m"
         curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1
+        rm -f license.txt
 
         sleep 5
 
+        # Make sure JQ is installed. 
+        if ! jq > /dev/null 2>&1;
+        then
+            brew install jq 
+        fi
+
         printf "\e[0;34mCheck license is now non-temporary\n\e[0m"
         curl -s --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/sys/license | jq '.data'
-        rm -f license.txt
     ;;
     esac
 
