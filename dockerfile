@@ -20,6 +20,8 @@ RUN unzip vault_${ENT_VAULT_VERSION}.zip \
 && chown root:root vault \
 && mv vault /usr/local/bin 
 
+EXPOSE 8200/tcp
+
 RUN vault -autocomplete-install \
 && bash -c 'complete -C /usr/local/bin/vault vault'
 

@@ -525,7 +525,7 @@ read MAIN_MENU
 case ${MAIN_MENU} in
 1)
     # Clean old files and compose projects
-    if ls ${PROJECT_ROOT}/_data > /dev/null;
+    if ls ${PROJECT_ROOT}/_data > /dev/null 2>&1;
     then
         printf "\e[0;34m\nOld Vault/Consul data found, reset before continuing? \e[0m"
         read RESET_PROJECT
@@ -569,12 +569,16 @@ case ${MAIN_MENU} in
             docker-compose -f docker-compose.yml up -d
 
             # Advise we are waiting for the project to complete the startup process
-            printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+            printf "\e[0;34m\nWaiting for Vault Service to complete startup\e[0m\n"
             until curl ${VAULT_ADDRESS}/v1/status 2>/dev/null | grep -q "Vault"
             do
-                # >/dev/null 2>&1
                 printf "\e[0;35m.\e[0m"
                 sleep 3
+                if ! docker ps | grep -q "vault";
+                then 
+                    printf "\e[0;34m\nVault failed to start, getting container logs...\e[0m\n"
+                    docker-compose logs vault 
+                fi
             done
 
             # init Vault
@@ -628,6 +632,11 @@ case ${MAIN_MENU} in
                 # >/dev/null 2>&1
                 printf "\e[0;35m.\e[0m"
                 sleep 3
+                if ! docker ps | grep -q "vault";
+                then 
+                    printf "\e[0;34m\nVault failed to start, getting container logs...\e[0m\n"
+                    docker-compose logs vault 
+                fi
             done
 
             mkdir -p ${PROJECT_ROOT}/_data 
