@@ -442,7 +442,7 @@ function reset_local(){
         rm -rf ${PROJECT_ROOT}/_data
         rm -rf ${PROJECT_ROOT}/${VAULT_ADDRESS}.crt ${PROJECT_ROOT}/${VAULT_ADDRESS}.key
         for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
-            find ${directory}/ -type f \( -name ".terraform" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
+            find ${directory}/ -type f \( -name ".terraform*" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
             # find ${directory}/ -mindepth 1 -type d -name ".terraform" -delete
             printf "\e[0;35m.\e[0m"
         done
@@ -718,7 +718,7 @@ EOF
         sleep 5
 
         # Make sure JQ is installed. 
-        if ! jq > /dev/null 2>&1;
+        if [ ! jq > /dev/null ];
         then
             brew install jq 
         fi
