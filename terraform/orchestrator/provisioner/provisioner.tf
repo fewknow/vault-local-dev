@@ -1,5 +1,6 @@
 provider "vault" {
   token = var.vault_token
+  address = var.vault_addr
 }
 
 # I WOULD REVISIT THIS LATER TO SEE IF IT MAKES SENSE TO SPLIT UP
@@ -26,12 +27,9 @@ resource "vault_token" "master-provisioner" {
   display_name = "master-provisioner"
   no_parent    = true
   policies = [
-    "tls-auth-issuer-role-policy",
     "tls-auth-certificate-issuer-policy",
-    "cert-role-issuer-policy",
     "mssql-provisioner-policy",
     "acl-provisioner-policy",
-    "ad-provisioner-policy",
     "master-provisioner-policy"
   ]
   ttl = "60m"

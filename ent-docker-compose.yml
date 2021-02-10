@@ -16,20 +16,20 @@ services:
 
     vault:
         container_name: "vault"
-        image: "vault"
+        image: "ent-vault:latest"
         links:
             - consul:consul
+            - mssql:mssql
         depends_on:
             - consul
         ports:
             - "8200:8200"
             - "22:22"
         volumes:
+            - ~/.aws:/root/.aws
             - ./config:/config
-            - ./vault/venafi:/vault/venafi
         cap_add:
             - IPC_LOCK
-        command: "server -config=/config/vault.hcl"
 
     mssql: # https://hub.docker.com/_/microsoft-mssql-server
         container_name: "mssql"
@@ -40,19 +40,3 @@ services:
             - MSSQL_PID=Developer
         ports:
             - "1433:1433"
-#
-# ldap:
-#   container_name: openldap
-#   image: mwaeckerlin/openldap
-#   ports:
-#     - '389:389'
-#     - '636:636'
-#   environment:
-#     - DOMAIN=fewknow.com
-#     - ORGANIZATION=FEWKNOW
-#     - PASSWORD=testing123
-# lam:
-#   container_name: lam
-#   image: mwaeckerlin/lam
-#   ports:
-#     - '8080:80'

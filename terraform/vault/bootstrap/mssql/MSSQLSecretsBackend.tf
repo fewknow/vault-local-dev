@@ -32,5 +32,5 @@ resource "vault_database_secret_backend_role" "role" {
     "CREATE USER [{{name}}] FOR LOGIN [{{name}}];",
     "GRANT SELECT ON SCHEMA::dbo TO [{{name}}];"
   ]
-  default_ttl         = 0
+  default_ttl         = 10
 }

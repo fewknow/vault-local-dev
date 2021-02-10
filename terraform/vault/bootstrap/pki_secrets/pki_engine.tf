@@ -62,9 +62,16 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "intermediate" {
   common_name = "${var.env}.com Intermediate Authority"
 }
 
+#resource "null_resource" "previous" {}
+resource "time_sleep" "wait_10_seconds" {
+  depends_on = [vault_pki_secret_backend_intermediate_cert_request.intermediate]
+
+  create_duration = "10s"
+}
+
 # Sign Intermediate Cert
 resource "vault_pki_secret_backend_root_sign_intermediate" "root" {
-  depends_on = [vault_pki_secret_backend_intermediate_cert_request.intermediate]
+  depends_on = [vault_pki_secret_backend_intermediate_cert_request.intermediate, time_sleep.wait_10_seconds]
   backend = vault_mount.pki_engine.path
   csr = vault_pki_secret_backend_intermediate_cert_request.intermediate.csr
   common_name = "${var.env}.com Intermediate Authority"

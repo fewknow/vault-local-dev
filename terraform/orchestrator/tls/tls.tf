@@ -1,6 +1,6 @@
 provider "vault" {
   # This will default to using $VAULT_ADDR
-
+  address = "https://127.0.0.1:8200"
   token = var.vault_token
 }
 
@@ -27,3 +27,12 @@ resource "vault_cert_auth_backend_role" "cert" {
 
   token_policies = ["${var.app}-policy"]
 }
+
+# resource "vault_pki_secret_backend_cert" "app" {
+#   depends_on = [ "vault_pki_secret_backend_role.admin" ]
+
+#   backend = "${vault_pki_secret_backend.intermediate.path}"
+#   name = "${vault_pki_secret_backend_role.test.name}"
+
+#   common_name = "app.my.domain"
+# }

@@ -9,3 +9,7 @@ variable "vault_addr" {
 variable "env" {
   description = "Terraform workspace environment"
 }
+
+# variable "ca_cert_file" {
+#   description = "Terraform workspace environment"
+# }
