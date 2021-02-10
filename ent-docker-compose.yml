@@ -3,25 +3,11 @@
 version: "3.6"
 
 services:
-    consul:
-        container_name: "consul"
-        image: "consul"
-        ports:
-            - "8500:8500"
-            - "8300:8300"
-        volumes:
-            - ./config:/config
-            - ./_data/consul:/data
-        command: "agent -server -data-dir=/data -bind 0.0.0.0 -client 0.0.0.0 -bootstrap-expect=1 -ui"
-
     vault:
         container_name: "vault"
         image: "ent-vault:latest"
         links:
-            - consul:consul
             - mssql:mssql
-        depends_on:
-            - consul
         ports:
             - "8200:8200"
             - "22:22"

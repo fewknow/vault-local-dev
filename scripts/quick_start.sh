@@ -609,12 +609,16 @@ case ${MAIN_MENU} in
             docker-compose -f docker-compose.yml up -d
 
             # Advise we are waiting for the project to complete the startup process
-            printf "\e[0;34m\nWaiting for Vault to complete startup\e[0m\n"
+            printf "\e[0;34m\nWaiting for Vault Service to complete startup\e[0m\n"
             until curl ${VAULT_ADDRESS}/v1/status 2>/dev/null | grep -q "Vault"
             do
-                # >/dev/null 2>&1
                 printf "\e[0;35m.\e[0m"
                 sleep 3
+                if ! docker ps | grep -q "vault";
+                then 
+                    printf "\e[0;34m\nVault failed to start, getting container logs...\e[0m\n"
+                    docker-compose logs vault 
+                fi
             done
 
             # init Vault
@@ -645,7 +649,7 @@ case ${MAIN_MENU} in
 
         # Check if docker is already running with a vault image
         if ! docker ps 2>/dev/null | grep -q "vault"; then
-
+        
             if ! which aws >/dev/null 2>&1
             then
                 printf "\e[0;34m\nAWS CLI is not installed, this is needed for access to KMS and S3 for the license - please install to continue...\e[0m\n\n"
@@ -657,6 +661,7 @@ case ${MAIN_MENU} in
                 printf "\e[0;34m\nAWS Access not configured, please run `aws configure` to continue.\e[0m\n\n"
                 exit 0
             fi
+
 
             # Check if Vault Enterprise image exists on host and is specified in the ent-docker-compose.yml file 
             if ! docker image ls | grep -q 'ent-vault' && cat ${PROJECT_ROOT}/ent-docker-compose.yml | grep -q '        image: "ent-vault:latest"'; then
@@ -682,8 +687,15 @@ case ${MAIN_MENU} in
                 # >/dev/null 2>&1
                 printf "\e[0;35m.\e[0m"
                 sleep 3
+                if ! docker ps | grep -q "vault";
+                then 
+                    printf "\e[0;34m\nVault failed to start, getting container logs...\e[0m\n"
+                    docker-compose logs vault 
+                fi
             done
 
+            mkdir -p ${PROJECT_ROOT}/_data 
+            
             # init Vault
             printf "\e[0;34m\n\nStarting Vault Operator Init\n\e[0m"
             vault operator init -address=${VAULT_ADDRESS} > ${KEYS_FILE}
@@ -712,10 +724,13 @@ case ${MAIN_MENU} in
 EOF
 
         printf "\e[0;34mInstalling license\n\e[0m"
-        curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1
-        rm -f license.txt
+        until curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1;
+        do
+            printf "\e[0;35m.\e[0m"
+            sleep 3
+        done
 
-        sleep 5
+        rm -f license.txt
 
         # Make sure JQ is installed. 
         if [ ! jq > /dev/null ];
