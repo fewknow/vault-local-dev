@@ -472,21 +472,33 @@ function reset_local(){
 
 # Build backend files for all directories in the terraform folder
 function set_backend(){
-    sleep 2
-    for directory in $(find ${PROJECT_ROOT}/terraform -type d -mindepth 1 -maxdepth 3 | sed s@//@/@); do
-        if [[ ${directory} == *tls* ]] | [[ ${directory} == *provisioner* ]] | [[ ${directory} == *orchestrator* ]]; then
-          continue
-        else
-          rm -f ${directory}/backend.tf
-          folder=$(echo ${directory} | awk -F "/" '{print $NF}')
-          echo "terraform {
-                 backend \"consul\" {
-                   path = \"vault/${folder}\"
-                 }
-               }" > ${directory}/backend.tf
-        fi
-        printf "\e[0;35m.\e[0m"
-    done
+    if [ ${VAULT_VERSION} == 1 ];
+     then
+        for directory in $(find ${PROJECT_ROOT}/terraform -type d -mindepth 1 -maxdepth 3 | sed s@//@/@); do
+            if [[ ${directory} == *tls* ]] | [[ ${directory} == *provisioner* ]] | [[ ${directory} == *orchestrator* ]]; then
+              continue
+            else
+              rm -f ${directory}/backend.tf
+              folder=$(echo ${directory} | awk -F "/" '{print $NF}')
+              echo "terraform {
+                     backend \"consul\" {
+                       path = \"vault/${folder}\"
+                     }
+                   }" > ${directory}/backend.tf
+            fi
+            printf "\e[0;35m.\e[0m"
+        done
+    else 
+        for directory in $(find ${PROJECT_ROOT}/terraform -type d -mindepth 1 -maxdepth 3 | sed s@//@/@); do
+            if [[ ${directory} == *tls* ]] | [[ ${directory} == *provisioner* ]] | [[ ${directory} == *orchestrator* ]]; then
+              continue
+            else
+              rm -f ${directory}/backend.tf
+              folder=$(echo ${directory} | awk -F "/" '{print $NF}')
+            fi
+            printf "\e[0;35m.\e[0m"
+        done
+    fi
 }
 
 # Function to unseal OSS vaults
