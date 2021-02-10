@@ -67,6 +67,16 @@ function build_local_certs(){
     printf "\e[0;34m\nAdding new self-signed localhost cert to keychain and setting as 'Always Trust - If prompted, please enter your 'sudo' password below.\e[0m\n\n'"
     sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
     cd - >/dev/null 2>&1
+
+    # Add alias for vault.dou.com if it doesn't exist
+    if ! grep -q "vault.dou.com" /etc/hosts;
+    then
+        printf "\e[0;34m\nAdding alias\e[0m 'vault.dou.com'\e[0;34m to /etc/hosts - If prompted, please enter your 'sudo' password below.\e[0m\n\n"
+        sudo su - <<EOF
+        echo  "# Added by vault-local-dev project" >> /etc/hosts
+        echo  "127.0.0.1 vault.dou.com" >> /etc/hosts
+EOF
+    fi
 }
 
 # Check certs exist so the local Vault/Consul cluster will start 
@@ -402,19 +412,24 @@ function demos(){
 
 # Reset the project back to a clean slate
 function reset_local(){
-    printf "\e[0;34m\nStop your previous docker-compose project? \e[0m"
-    read STOP_COMPOSE
 
-    # If true, stop any docker-compose projects built with this project.
-    case $STOP_COMPOSE in
-    y|Y|yes)
-        cd ${PROJECT_ROOT}
-        docker-compose down
-        cd - >/dev/null 2>&1
-    ;;
-    n|N|no)
-    ;;
-    esac
+    # If compose already has a vault running, ask if we should stop
+    if docker-compose ps | grep -q vault > /dev/null 2>&1;
+    then
+        printf "\e[0;34m\nStop your previous docker-compose project? \e[0m"
+        read STOP_COMPOSE
+
+        # If true, stop any docker-compose projects built with this project.
+        case $STOP_COMPOSE in
+        y|Y|yes)
+            cd ${PROJECT_ROOT}
+            docker-compose down
+            cd - >/dev/null 2>&1
+        ;;
+        n|N|no)
+        ;;
+        esac
+    fi
 
     printf "\e[0;34m\nShould all previously used files be removed?\e[0m i.e Vault and Consul data, Terraform backends, and TLS Certs? "
     read RESET_BOOL
@@ -427,7 +442,7 @@ function reset_local(){
         rm -rf ${PROJECT_ROOT}/_data
         rm -rf ${PROJECT_ROOT}/${VAULT_ADDRESS}.crt ${PROJECT_ROOT}/${VAULT_ADDRESS}.key
         for directory in $(find ${PROJECT_ROOT}/terraform -type d | sed s@//@/@); do
-            find ${directory}/ -type f \( -name ".terraform" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
+            find ${directory}/ -type f \( -name ".terraform*" -o -name "terraform.tfstate.d" -o -name "terraform.tfstate" -o -name "terraform.tfstate.backup" -o -name "backend.tf" \) -delete
             # find ${directory}/ -mindepth 1 -type d -name ".terraform" -delete
             printf "\e[0;35m.\e[0m"
         done
@@ -493,7 +508,7 @@ export VAULT_SKIP_VERIFY=true
 VAULT_ADDRESS="https://127.0.0.1:8200"
 export VAULT_ADDR=${VAULT_ADDRESS}
 
-# Absolute path to the project root
+# Absolute path to the project root based on this scripts location. 
 PROJECT_ROOT=$(dirname $(cd `dirname $0` && pwd))
 # File to store the restore/recovery keys and the root token
 KEYS_FILE="${PROJECT_ROOT}/_data/keys.txt"
@@ -502,7 +517,7 @@ BUCKET_NAME="ian-bucket-dev"
 # Name of the license file in the AWS bucket above
 LICENSE_FILE="license.txt"
 
-# Terraform and Vault CLI check
+# Dependency check, both OSS and ENT Vault Versions. 
 if ! which vault >/dev/null 2>&1
 then
     printf "\e[0;34m\nVault not installed, please install to continue...\e[0m\n\n"
@@ -510,6 +525,10 @@ then
 elif ! which terraform >/dev/null 2>&1
 then
     printf "\e[0;34m\nTerraform not installed, please install to continue...\e[0m\n\n"
+    exit 0
+elif ! which docker >/dev/null 2>&1
+then
+    printf "\e[0;34m\nDocker not installed, please install to continue...\e[0m\n\n"
     exit 0
 fi
 
@@ -526,6 +545,10 @@ read MAIN_MENU
 
 case ${MAIN_MENU} in
 1)
+    #######################
+    ### Full Script Run ###
+    #######################
+
     # Clean old files and compose projects
     if ls ${PROJECT_ROOT}/_data >/dev/null 2>&1;
     then
@@ -573,6 +596,10 @@ case ${MAIN_MENU} in
 
     case ${VAULT_VERSION} in
     1)
+        #################
+        ### OSS Vault ###
+        #################
+
         # Check if docker is already running with a vault image
         if ! docker ps 2>/dev/null | grep -q "vault";
         then
@@ -612,8 +639,24 @@ case ${MAIN_MENU} in
         export VAULT_TOKEN="${VR_TOKEN}"
     ;;
     2)
+        #################
+        ### Ent Vault ###
+        #################
+
         # Check if docker is already running with a vault image
         if ! docker ps 2>/dev/null | grep -q "vault"; then
+
+            if ! which aws >/dev/null 2>&1
+            then
+                printf "\e[0;34m\nAWS CLI is not installed, this is needed for access to KMS and S3 for the license - please install to continue...\e[0m\n\n"
+                exit 0
+            fi
+
+            if ! aws s3api list-buckets > /dev/null 2>&1;
+            then
+                printf "\e[0;34m\nAWS Access not configured, please run `aws configure` to continue.\e[0m\n\n"
+                exit 0
+            fi
 
             # Check if Vault Enterprise image exists on host and is specified in the ent-docker-compose.yml file 
             if ! docker image ls | grep -q 'ent-vault' && cat ${PROJECT_ROOT}/ent-docker-compose.yml | grep -q '        image: "ent-vault:latest"'; then
@@ -669,13 +712,19 @@ case ${MAIN_MENU} in
 EOF
 
         printf "\e[0;34mInstalling license\n\e[0m"
-        curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license
+        curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1
+        rm -f license.txt
 
         sleep 5
 
+        # Make sure JQ is installed. 
+        if [ ! jq > /dev/null ];
+        then
+            brew install jq 
+        fi
+
         printf "\e[0;34mCheck license is now non-temporary\n\e[0m"
         curl -s --header "X-Vault-Token: ${VR_TOKEN}" ${VAULT_ADDRESS}/v1/sys/license | jq '.data'
-        rm -f license.txt
     ;;
     esac
 
@@ -702,6 +751,10 @@ EOF
     demos
 ;;
 2)
+    ##########################################
+    ### Bootstrap An Already Running Vault ###
+    ##########################################
+
     PROJECT_NAME=$(ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v localhost | awk -F'.' '/crt/ {print $1}')
     export TF_VAR_env=${PROJECT_NAME}
 
@@ -718,6 +771,10 @@ EOF
     fi
 ;;
 3)
+    #################
+    ### Run Demos ###
+    #################
+
     PROJECT_NAME=$(ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v localhost | awk -F'.' '/crt/ {print $1}')
     export TF_VAR_env=${PROJECT_NAME}
 
@@ -731,12 +788,23 @@ EOF
     fi
 ;;
 4)
+    #####################
+    ## Reset Local Env ##
+    #####################
+
     reset_local
 ;;
 5)
+    #######################
+    ### Exit The Script ###
+    #######################
     exit 0
 ;;
 *)
+    ######################
+    ### Error Catching ###
+    ######################
+
     printf "\e[0;34m\nInvalid Selection, please try again.\n\n"
     ${PROJECT_ROOT}/scripts/$(basename $0) && exit
 ;;
