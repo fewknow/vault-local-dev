@@ -8,6 +8,7 @@ services:
         image: "ent-vault:latest"
         links:
             - mssql:mssql
+            - kmip:kmip
         ports:
             - "8200:8200"
             - "22:22"
@@ -26,3 +27,8 @@ services:
             - MSSQL_PID=Developer
         ports:
             - "1433:1433"
+    kmip: 
+        container_name: "kmip-server"
+        image: "lamw/vmwkmip"
+        ports:
+            - "5696:5696"

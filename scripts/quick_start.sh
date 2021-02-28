@@ -423,7 +423,7 @@ function reset_local(){
         case $STOP_COMPOSE in
         y|Y|yes)
             cd ${PROJECT_ROOT}
-            docker-compose down
+            docker-compose down --remove-orphans
             cd - >/dev/null 2>&1
         ;;
         n|N|no)
@@ -718,7 +718,12 @@ case ${MAIN_MENU} in
         #if curl -s --header "X-Vault-Token: ${TOKEN}" ${VAULT_ADDRESS}/v1/sys/license | grep -i 
 
         printf "\n\e[0;34mDownloading License from S3\n\e[0m"
-        aws s3api get-object --bucket ${BUCKET_NAME} --key ${LICENSE_FILE} license.txt >/dev/null
+        until $( aws s3api get-object --bucket ${BUCKET_NAME} --key ${LICENSE_FILE} license.txt >/dev/null )
+        do
+            printf "\e[0;35m.\e[0m"
+            sleep 3
+        done
+
         LICENSE=`cat license.txt`
         cat << EOF > license.txt
 {
@@ -727,13 +732,14 @@ case ${MAIN_MENU} in
 EOF
 
         printf "\e[0;34mInstalling license\n\e[0m"
-        until curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1;
+        sleep 2
+        until $( curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1 )
         do
             printf "\e[0;35m.\e[0m"
             sleep 3
         done
 
-        rm -f license.txt
+        #rm -f license.txt
 
         # Make sure JQ is installed. 
         if [ ! jq > /dev/null ];

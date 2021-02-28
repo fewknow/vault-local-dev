@@ -40,3 +40,16 @@ resource "vault_generic_endpoint" "kmip_role" {
 }
 EOT
 }
+
+# Create a kmip creds(Full TLS Cert Chain) for the role
+resource "vault_generic_endpoint" "kmip_creds" {
+  depends_on           = [vault_mount.kmip_mount]
+  path                 = "${vault_mount.kmip_mount.path}/scope/${var.env}/role/admin/credential/generate"
+  ignore_absent_fields = true
+  disable_read         = true
+  data_json = <<EOT
+{
+  "operation_all": true
+}
+EOT
+}
