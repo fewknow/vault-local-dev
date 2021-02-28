@@ -739,7 +739,7 @@ EOF
             sleep 3
         done
 
-        #rm -f license.txt
+        rm -f license.txt
 
         # Make sure JQ is installed. 
         if [ ! jq > /dev/null ];
