@@ -8,7 +8,7 @@ function bootstrap_vault(){
 
     printf "\e[0;34m\n\nStarting Bootstrap\n\n\e[0m"
 
-    for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@ | sort); do
+    for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@ | sort --ignore-case); do
         printf "\e[0;34mLocation:\e[0m $DIR\n"
         MODULE="$(basename $(dirname ${DIR}/backend.tf))"
 
@@ -478,6 +478,7 @@ function set_backend(){
         else
           rm -f ${directory}/backend.tf
           folder=$(echo ${directory} | awk -F "/" '{print $NF}')
+          
           if [ ${VAULT_VERSION} == 1 ]
             then
                 echo "terraform {

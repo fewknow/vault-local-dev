@@ -26,7 +26,7 @@ resource "vault_pki_secret_backend_root_cert" "interal_root_cert" {
   key_type = "rsa"
   key_bits = 4096
   exclude_cn_from_sans = true
-  ou = "My OU"
+  ou = "OU=Dev,DC=local,DC=${var.env}"
   organization = var.env
 }
 
@@ -77,7 +77,7 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "root" {
   common_name = "${var.env}.com Intermediate Authority"
   exclude_cn_from_sans = true
   ttl = "87600"
-  ou = "My OU"
+  ou = "OU=Dev,DC=local,DC=${var.env}"
   organization = var.env
 }
 
