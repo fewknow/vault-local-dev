@@ -5,7 +5,7 @@ version: "3.6"
 services:
     consul:
         container_name: "consul"
-        image: "consul:latest"
+        image: "consul"
         ports:
             - "8500:8500"
             - "8300:8300"
@@ -31,7 +31,7 @@ services:
             - IPC_LOCK
         command: "server -config=/config/vault.hcl"
 
-    mssql:
+    mssql: # https://hub.docker.com/_/microsoft-mssql-server
         container_name: "mssql"
         image: "mcr.microsoft.com/mssql/server"
         environment:

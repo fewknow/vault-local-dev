@@ -10,10 +10,14 @@ resource "vault_policy" "mssql-provisioner-policy" {
     capabilities = [ "update" ]
   }
 
-  # Work with mssql secrets engine
-  path "mssql/roles/*" {
-    capabilities = [ "create", "read", "update", "delete", "list", "sudo" ]
+  # Allow creating dynamic db creds
+  path "mssql/creds/*" {
+    capabilities = ["create", "read", "update", "delete", "list", "sudo"]
   }
 
-    EOT
+  # Work with mssql secrets engine
+  path "mssql/roles/*" {
+    capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+  }
+  EOT
 }

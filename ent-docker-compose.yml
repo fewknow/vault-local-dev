@@ -1,0 +1,28 @@
+---
+# yamllint disable rule:line-length
+version: "3.6"
+
+services:
+    vault:
+        container_name: "vault"
+        image: "ent-vault:latest"
+        links:
+            - mssql:mssql
+        ports:
+            - "8200:8200"
+            - "22:22"
+        volumes:
+            - ~/.aws:/root/.aws
+            - ./config:/config
+        cap_add:
+            - IPC_LOCK
+
+    mssql: # https://hub.docker.com/_/microsoft-mssql-server
+        container_name: "mssql"
+        image: "mcr.microsoft.com/mssql/server"
+        environment:
+            - ACCEPT_EULA=Y
+            - SA_PASSWORD=Testing123
+            - MSSQL_PID=Developer
+        ports:
+            - "1433:1433"

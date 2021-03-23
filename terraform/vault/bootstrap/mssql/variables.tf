@@ -15,17 +15,21 @@ variable "encrypt" {
   default     = "?encrypt=disable"
 }
 
-variable "business_support_it_dev_user" {
-  description = "User name for MSSQL Business Support IT"
-  default     = "Developer"
+variable "db_name" {
+  description = "Name for the database"
 }
 
-variable "business_support_it_dev_password" {
-  description = "Password for MSSQL Business Support IT"
-  default     = "Testing123"
+variable "sql_user" {
+  description = "Name for the database admin"
+  default     = "sa"
 }
 
-variable "business_support_it_dev_ip" {
-  description = "IP for dev business support IT"
-  default     = "127.0.0.1"
+variable "sql_pass" {
+  description = "Database password"
+  default = "Testing123"
+}
+
+variable "sql_server_ip" {
+  description = "Ip for the database"
+  default     = "mssql"
 }
