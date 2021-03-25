@@ -8,7 +8,7 @@ function bootstrap_vault(){
 
     printf "\e[0;34m\n\nStarting Bootstrap\n\n\e[0m"
 
-    for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@ | sort); do
+    for DIR in $(find ${PROJECT_ROOT}/terraform/vault/bootstrap/ -type d -mindepth 1 -maxdepth 1 | sed s@//@/@ | sort --ignore-case); do
         printf "\e[0;34mLocation:\e[0m $DIR\n"
         MODULE="$(basename $(dirname ${DIR}/backend.tf))"
 
@@ -423,7 +423,7 @@ function reset_local(){
         case $STOP_COMPOSE in
         y|Y|yes)
             cd ${PROJECT_ROOT}
-            docker-compose down
+            docker-compose down --remove-orphans
             cd - >/dev/null 2>&1
         ;;
         n|N|no)
@@ -478,6 +478,7 @@ function set_backend(){
         else
           rm -f ${directory}/backend.tf
           folder=$(echo ${directory} | awk -F "/" '{print $NF}')
+          
           if [ ${VAULT_VERSION} == 1 ]
             then
                 echo "terraform {
@@ -717,7 +718,12 @@ case ${MAIN_MENU} in
         #if curl -s --header "X-Vault-Token: ${TOKEN}" ${VAULT_ADDRESS}/v1/sys/license | grep -i 
 
         printf "\n\e[0;34mDownloading License from S3\n\e[0m"
-        aws s3api get-object --bucket ${BUCKET_NAME} --key ${LICENSE_FILE} license.txt >/dev/null
+        until $( aws s3api get-object --bucket ${BUCKET_NAME} --key ${LICENSE_FILE} license.txt >/dev/null )
+        do
+            printf "\e[0;35m.\e[0m"
+            sleep 3
+        done
+
         LICENSE=`cat license.txt`
         cat << EOF > license.txt
 {
@@ -726,7 +732,8 @@ case ${MAIN_MENU} in
 EOF
 
         printf "\e[0;34mInstalling license\n\e[0m"
-        until curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1;
+        sleep 2
+        until $( curl --request PUT --header "X-Vault-Token: ${VR_TOKEN}" -d @license.txt ${VAULT_ADDRESS}/v1/sys/license >/dev/null 2>&1 )
         do
             printf "\e[0;35m.\e[0m"
             sleep 3
