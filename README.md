@@ -6,9 +6,34 @@ There are 2 options to run this project, the Quick_start will prompt you for you
 ***This project is a work in-progress, Sam Flint and Ian Copeland would love any suggestions you might have in the form of a PR.***
 
 ---
+### Pre-reqs
+- awscli
+- vault
+- terraform
+- docker
+
+Before running this project you will need to be logged into the DoU Training AWS account for access to the Enterprise Vault license as well as the KMS key.
 
 ### Quick Start option:
-From the project root run the `quick_start.sh` script to build your cluster. You will be promepted to name your project unless certs are found in the config directory; in which case the script will use the name of your pem file. 
+From the project root run the `sh scripts/quick_start.sh` script to build your cluster. You will be promepted to name your project unless certs are found in the config directory; in which case the script will use the name of your pem file for the project name. This will complete the following tasks: 
+
+1.Create self signed TLS certs for Vault/Consul 
+2.Run a docker compose project with Vault
+  * Enterprise will build a custom docker image using RAFT as a storage backend
+  * Entperise will also start a KMIP server in a docker container 
+  * Enterprise uses AWSKMS for autounseal
+  * OSS uses offical hashi image with consul as a backend
+3. Docker starts a Mssql container for a demo of dyanmic secrets 
+4. Script inits Vault and recovery stores keys in /_data/keys.txt
+5. Optional: Bootstrap Vault via TF with all or some of the following:
+  * Create ACL provisioner policy
+  * Create kv secret mount
+  * Create TLS auth mount and role
+  * Create root and intermediate PKI Engine 
+  * Create AppRole 
+  * Create mssql secret mount and role 
+ 6. If you bootstrapped TLS/PKI/MSSQL/ACL Provisioner, you have the option to run the app onboard/read mssql via dynamic creds demo. 
+ 7. The same demo as above, but using approle auth rather than TLS
 
 ### Manual Start:
 1. First you will need to generate the certs.   Run `bash create_local_certs.sh <name>` from the project root. 
