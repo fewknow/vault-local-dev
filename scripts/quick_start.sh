@@ -782,17 +782,44 @@ EOF
     PROJECT_NAME=$(ls ${PROJECT_ROOT}/config/cluster_certs/ | grep -v localhost | awk -F'.' '/crt/ {print $1}')
     export TF_VAR_env=${PROJECT_NAME}
 
+    printf "\e[0;32m\nWhere is your Vault?\e[0m\n"
+    printf " 1. Local Vault\n"
+    printf " 2. Remote Vault\n"
+    read VAULT_LOCATION
+
     # Get project name 
-    if VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`;
-    then
-        # Starting bootstrap
-        bootstrap_vault
-        # Starting Demos
-        demos
-    else
-        printf "\e[0;34m\nRoot token not found in:\e[0m ${PROJECT_ROOT}/_data\n"
-        printf "\e[0;34m\nPlease rerun this script and choose 'Start From The Begining'\n"
-    fi
+    case ${VAULT_LOCATION} in
+    1)
+        VR_TOKEN=`cat ${PROJECT_ROOT}/_data/keys.txt | grep Initial | cut -d':' -f2 | tr -d '[:space:]'`
+    ;;
+    2)
+        printf "\e[0;34m\nPlease enter the Vault Token: "
+        read REMOTE_KEY_BUCKET
+        printf "\e[0;34m\nPlease enter the Vault address: "
+        read REMOTE_VAULT_ADDR
+        VAULT_ADDRESS="http://${REMOTE_VAULT_ADDR}:8200"
+        #aws s3api get-object --bucket ${REMOTE_KEY_BUCKET} --key vault_credentials.txt ${PROJECT_ROOT}/license.txt > /dev/null
+        VR_TOKEN=${REMOTE_KEY_BUCKET}
+        
+    ;;
+    esac
+
+    # printf "\e[0;34m\nChange/Set the Terraform backend before bootstrapping?\e[0m " 
+    # read RESET_BACKEND
+
+    # case $RESET_BACKEND in 
+    # y|Y|yes)
+    #   # Setup terraform backend
+    #   set_backend
+    # ;;
+    # *)
+    # ;;
+    # esac
+
+    # Starting bootstrap
+    bootstrap_vault
+    # Starting Demos
+    demos
 ;;
 3)
     #################
