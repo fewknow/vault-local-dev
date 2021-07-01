@@ -64,7 +64,7 @@ resource "vault_policy" "master-provisioner-policy" {
 
 output "master_provisioner_token" {
   value     = vault_token.master-provisioner.client_token
-  #sensitive = true
+  sensitive = true
 }
 
 

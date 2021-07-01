@@ -1,7 +1,7 @@
 FROM centos:latest
 
 # Set variables 
-ENV ENT_VAULT_VERSION=1.6.0
+ENV ENT_VAULT_VERSION=1.7.1
 
 # Install deps 
 RUN dnf -y install epel-release && dnf -y update 
