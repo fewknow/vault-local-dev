@@ -4,6 +4,7 @@ output "role_name" {
 
 output "appRole_fetch_token" {
   value = vault_token.fetch_approle.client_token
+  sensitive = true
 }
 
 # output "role_id" {

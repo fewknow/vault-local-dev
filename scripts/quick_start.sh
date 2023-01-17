@@ -244,12 +244,12 @@ function demos(){
 
     function orchestrator(){
 
-        if ! ls /Library/Python/2.7/site-packages/ | grep -q "requests"
-        then
-            # Install Python module 'requests'
-            printf "\e[0;34m\nRequests module needed, please enter your sudo password below to complete the pip3 installation\n\e[0m"
-            sudo easy_install requests==2.22.0
-        fi
+        #if ! ls /Library/Python/2.7/site-packages/ | grep -q "requests"
+        #then
+        #    # Install Python module 'requests'
+        #    printf "\e[0;34m\nRequests module needed, please enter your sudo password below to complete the pip3 installation\n\e[0m"
+        #    sudo brew install python3
+        #fi
 
         # Make the application config directory
         if ! ls ${PROJECT_ROOT}/config/${APP_NAME} >/dev/null 2>&1;

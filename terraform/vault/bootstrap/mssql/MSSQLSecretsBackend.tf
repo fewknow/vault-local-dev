@@ -14,13 +14,15 @@ resource "vault_database_secret_backend_connection" "dynamic-cert-demo" {
   verify_connection = "false"
 
   mssql {
-    connection_url = "sqlserver://{{username}}:{{password}}@${var.sql_server_ip}:1433${var.encrypt}"
+    connection_url = "sqlserver://sa:Testing123@${var.sql_server_ip}:1433${var.encrypt}"
   }
 
-  data = {
-    username = var.sql_user
-    password = var.sql_pass
-  }
+# This stopped working on the current version of Terraform provider and vault.  Had to hard code above.
+# Date is 1/17/2023.
+#  data = {
+#    username = var.sql_user
+#    password = var.sql_pass
+#  }
 }
 
 resource "vault_database_secret_backend_role" "role" {

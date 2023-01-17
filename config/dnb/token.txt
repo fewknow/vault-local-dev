@@ -1,0 +1,35 @@
+{
+  "request_id": "f23c4643-d42f-df51-387b-6f8344380707",
+  "lease_id": "",
+  "renewable": false,
+  "lease_duration": 0,
+  "data": null,
+  "wrap_info": null,
+  "warnings": null,
+  "auth": {
+    "client_token": "hvs.CAESIApI6zcZBwFXywtOjy0nlh5MNeYVdJAuzksfPOMPYhcEGh4KHGh2cy5kYmtFRWRVQ0FrZjBPSElyb1hJUjRPeGw",
+    "accessor": "EyKOFsIABN4K22MSW6SEtQ7l",
+    "policies": [
+      "default",
+      "dnb-policy"
+    ],
+    "token_policies": [
+      "default",
+      "dnb-policy"
+    ],
+    "metadata": {
+      "authority_key_id": "f9:ae:66:80:83:4d:dc:24:98:8a:59:ea:e6:86:da:62:f5:84:e9:42",
+      "cert_name": "dnb",
+      "common_name": "dnb.local-vault.com",
+      "serial_number": "475977109023024655333399452907597060049335325153",
+      "subject_key_id": "73:e9:a7:1c:0b:83:9b:f9:ff:53:77:90:51:7b:a0:7a:25:64:41:12"
+    },
+    "lease_duration": 300,
+    "renewable": true,
+    "entity_id": "94343650-23a6-6440-2623-19ca00a2d859",
+    "token_type": "service",
+    "orphan": true,
+    "mfa_requirement": null,
+    "num_uses": 0
+  }
+}
