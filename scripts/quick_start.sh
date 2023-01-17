@@ -42,7 +42,7 @@ function bootstrap_vault(){
 function build_local_certs(){
     # Get local docker network ip address and add it to our certificate request 
     IFIP=`ifconfig en0 | awk '/broadcast/{print $2}'`
-    printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nDNS.2 = vault.dou.com\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
+    printf "authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nDNS.2 = vault.fewknow.com\nIP.1 = ${IFIP}\nIP.2 = 127.0.0.1" > ${PROJECT_ROOT}/config/domains.ext
 
     # Generate the project certificates
     mkdir -p ${PROJECT_ROOT}/config/cluster_certs >/dev/null 2>&1
@@ -68,13 +68,13 @@ function build_local_certs(){
     sudo /usr/bin/security -v add-trusted-cert -r trustAsRoot -e hostnameMismatch -d -k /Library/Keychains/System.keychain localhost.crt >/dev/null 2>&1
     cd - >/dev/null 2>&1
 
-    # Add alias for vault.dou.com if it doesn't exist
-    if ! grep -q "vault.dou.com" /etc/hosts;
+    # Add alias for vault.fewknow.com if it doesn't exist
+    if ! grep -q "vault.fewknow.com" /etc/hosts;
     then
-        printf "\e[0;34m\nAdding alias\e[0m 'vault.dou.com'\e[0;34m to /etc/hosts - If prompted, please enter your 'sudo' password below.\e[0m\n\n"
+        printf "\e[0;34m\nAdding alias\e[0m 'vault.fewknow.com'\e[0;34m to /etc/hosts - If prompted, please enter your 'sudo' password below.\e[0m\n\n"
         sudo su - <<EOF
         echo  "# Added by vault-local-dev project" >> /etc/hosts
-        echo  "127.0.0.1 vault.dou.com" >> /etc/hosts
+        echo  "127.0.0.1 vault.fewknow.com" >> /etc/hosts
 EOF
     fi
 }

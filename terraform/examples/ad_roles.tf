@@ -6,10 +6,10 @@ The service account has to be in the ou=HashiCorpVault in order for this to work
 resource "vault_generic_secret" "example" {
   path = "ad/roles/${var.app}-role"
 
-  # The username must match the userPrincipalName for example username@qvcdev.qvc.net.
+  # The username must match the userPrincipalName for example username@fewknow.net.
   data_json = <<EOT
 {
-  "service_account_name": "usernameExample@qvcdev.qvc.net"
+  "service_account_name": "usernameExample@fewknow.net"
 }
 EOT
 }

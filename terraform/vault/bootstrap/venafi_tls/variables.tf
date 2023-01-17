@@ -20,7 +20,7 @@ variable "venafi_password" {
 
 variable "venafi_address" {
   description = "Address of the Venafi instance being targeted"
-  default     = "https://venafi.qvcdev.qvc.net:443/vedsdk"
+  default     = "https://venafi.fewknow.net:443/vedsdk"
 }
 
 variable "venafi_policy_zone_tls" {

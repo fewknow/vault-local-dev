@@ -8,13 +8,8 @@ backend.
 insecure_key
 insecure_key.pub
 .vagrant
-ansible/roles/qvc-vault-provision-onprem/files/*
-ansible/roles/qvc-consul-provision-onprem/files/*
-ansible/vault-agent/roles/vault/templates/roleID
-ansible/vault-agent/roles/vault/templates/secretID
 config.json
 sans.json
-ansible/playbooks/roles/python-cert-generation/files/certs/**/*
 certs/**/*
 terraform/vault-consul/backup.txt
 terraform/vault-consul/token.txt

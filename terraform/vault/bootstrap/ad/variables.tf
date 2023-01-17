@@ -13,13 +13,11 @@ variable "ad_bindpass" {
 }
 
 variable "ad_url" {
-  description = "URL for QVC US Active Directory"
-  #default = "ldaps://wchwdc612.qvcdev.qvc.net"
+  description = "URL for FEWKNOW US Active Directory"
 }
 
 variable "ad_userdn" {
   description = "Location where to look for eligable accounts for password rotation"
-  #default = "OU=HashiCorpVault,DC=qvcdev,DC=qvc,DC=net"
 }
 
 variable "ad_tlsminversion" {
@@ -29,7 +27,6 @@ variable "ad_tlsminversion" {
 
 variable "vault_addr" {
   description = "Address of the Vault instance being targeted"
-  #default = "https://vault1.dev.wc.vault.qvcdev.qvc.net:8200/"
 }
 
 variable "env" {
