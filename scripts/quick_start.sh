@@ -457,6 +457,7 @@ function reset_local(){
         # Clearing Mimir Project Certs
         printf "\e[0;34m\n\nClearing local cluster and project created certs\e[0m\n"
         for file in $(find ${PROJECT_ROOT}/config -type f -not -name "*.hcl" | sed s@//@/@); do
+            printf "Removeing file : ${file}\n"
             rm -rf ${file}
             printf "\e[0;35m.\e[0m"
         done
