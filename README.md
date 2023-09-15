@@ -9,6 +9,8 @@ There are 2 options to run this project, the Quick_start will prompt you for you
 
 ### Quick Start option:
 From the project root run the `quick_start.sh` script to build your cluster. You will be promepted to name your project unless certs are found in the config directory; in which case the script will use the name of your pem file. 
+If this is your first time running the quick start you will need to choose `1. Start from the begining`. The other modes are used 
+for debugging or jumping to demo once you have it setup locally.
 
 ### Manual Start:
 1. First you will need to generate the certs.   Run `bash create_local_certs.sh <name>` from the project root. 
@@ -87,6 +89,6 @@ To generate a token use
 
 Note: If you're using a Linux machine the first step is to give `rwxrwxrwx` permissions recursively to the `data` and `config` folders as Docker is unable to access them on a Linux machine without those permissions. The problem is not present on MacOS. Run `chmod -R 777 _data config`.
 
-Note: On MacOS you need to install `gnu-sed` to be able to run the `token_replacer` script, this is required because the version of `sed` bundbled with MacOS is different to the one that comes with Linux systems, this is documented [here](https://unix.stackexchange.com/questions/13711/differences-between-sed-on-mac-osx-and-other-standard-sed).
+Note: On MacOS you need to install `gnu-sed` and `jq` to be able to run the `token_replacer` script, this is required because the version of `sed` bundbled with MacOS is different to the one that comes with Linux systems, this is documented [here](https://unix.stackexchange.com/questions/13711/differences-between-sed-on-mac-osx-and-other-standard-sed).
 
-Install GNU sed on MacOS: `$ brew install gnu-sed`
+Install GNU sed and jq on MacOS: `$ brew install gnu-sed`  && `brew install jq`

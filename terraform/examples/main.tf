@@ -9,7 +9,7 @@ data "terraform_remote_state" "mssql" {
 
   config = {
     subpath  = "vault/bootstrap/mssql"
-    url      = "https://artifactory.qvcdev.qvc.net/artifactory"
+    url      = "https://artifactory.fewknow.net/artifactory"
     repo     = "terraform-states"
     username = "***artifactory username***"
     password = "***artifactory password***"

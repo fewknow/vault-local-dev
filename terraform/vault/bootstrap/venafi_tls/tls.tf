@@ -5,7 +5,7 @@
 #   backend = "tls"
 
 #   type                 = "internal"
-#   common_name          = "qvc.com"
+#   common_name          = "fewknow.com"
 #   ttl                  = "87600h"
 #   format               = "pem"
 #   private_key_format   = "der"
@@ -13,7 +13,7 @@
 #   key_bits             = 4096
 #   exclude_cn_from_sans = true
 #   ou                   = "My OU"
-#   organization         = "QVC"
+#   organization         = "FEWKNOW"
 # }
 
 # # crl_config sets the duration for which the generated cert should be valid.

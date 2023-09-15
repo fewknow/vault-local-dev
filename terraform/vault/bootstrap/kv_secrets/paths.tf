@@ -1,6 +1,4 @@
-#QVC Vault secrets KV path
-
-#QVC secrets path
+#Vault secrets KV path
 resource "vault_mount" "secrets" {
   path = "secrets/"
   type = "generic"

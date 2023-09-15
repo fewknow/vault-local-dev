@@ -36,7 +36,7 @@ services:
         image: "mcr.microsoft.com/mssql/server"
         environment:
             - ACCEPT_EULA=Y
-            - SA_PASSWORD=Testing123
+            - MSSQL_SA_PASSWORD=Testing123
             - MSSQL_PID=Developer
         ports:
             - "1433:1433"

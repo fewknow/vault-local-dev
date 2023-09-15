@@ -19,4 +19,4 @@ listener "tcp" {
 seal "awskms" {
   region     = "us-west-2"
   kms_key_id = "332dfb18-7691-496b-aa52-577ca28f0764"
-}  
+}

@@ -18,4 +18,4 @@ listener "tcp" {
 api_addr = "https://localhost:8200"
 disable_mlock = true
 ui=true
-plugin_directory = "vault/venafi"      
+plugin_directory = "vault/venafi"
